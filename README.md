@@ -50,6 +50,42 @@ Real-speed playtests use an instrumented bot that reads at human pace. Before tu
 
 A turn takes about 60–100 s at full reading pace; FAST and Space shorten it.
 
+## Nations
+
+Short, memorable names. The humour sits in the leader names and their lines.
+
+| Leader | Nation |
+|---|---|
+| Donald Trumpet | **Freedonia** (after the Marx Brothers' *Duck Soup*) |
+| Vlad Putinov | **Tsaria** |
+| Xi Jinpooh | **Cathay** |
+| Kim Jong-Fun | **Hermitia**, the Hermit Kingdom |
+| Emmanuel Macroni | **Gallia** |
+| Elongated Muskrat | **Muskovy**, a sovereign seastead |
+| Josef Stalemate | **Comradia** |
+| Benito Mussolinguini | **Aldentia** |
+| Muammar Gaddafty | **Tentopia** |
+| Idi Amok | **Medalia** |
+
+## Engagement design
+
+The design draws on self-determination theory (competence, autonomy and relatedness predict enjoyment and replay), game-feel ("juice") research, and roguelite meta-progression. There are no purchases, no timers that punish stepping away, and no streak that resets to zero.
+
+- **Autonomy:**
+  - **Doctrine draft:** pick 1 of 3 random doctrines at the start of each game. The pool grows from 6 to 10 with clearance; unlocks add variety, not raw power.
+  - **36 decisions**, each option with a real upside and cost.
+- **Competence:**
+  - **3 directives per game:** optional goals with live progress and XP on completion.
+  - Odds shown before every roll, and a live rank bar in the HUD.
+  - **Hot streaks:** growing bonus XP for consecutive successful operations.
+- **Public mood:** every answer is tagged popular or unpopular. Unpopular choices build anger, and each further unpopular choice costs more stability. Five units of anger trigger a general strike. Below 35 stability, construction runs at −25%.
+- **Juice:**
+  - **Particles and glow:** an additive-glow particle system draws launch flares, glowing smoke trails and a re-entry flare.
+  - **Detonations scale with yield:** flash, fireball, double shockwave, a rising mushroom of cooling embers and smoke, and sparks.
+  - **Cyan intercept bursts.**
+  - **Scars and city lights:** glowing scars stay on the map and cool over several turns. Each nation has city lights that go dark as its population falls.
+  - **Layered sound:** detonations get a crack, a sub-bass thump and a rumble scaled by yield.
+
 ## Variety and replayability
 
 Measured with `tools/balance-sim.js`-style headless runs. Each figure is the share of log lines in a game that repeat (numbers ignored); structural headers are excluded.
