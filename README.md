@@ -1,4 +1,4 @@
-# STRANGE GAME — a global thermonuclear simulation (prototype)
+# STRANGE GAME — a global thermonuclear simulation (beta)
 
 A turn-based nuclear-strategy game in a single HTML file. Gameplay draws on *Nuclear War* (New World Computing, 1989); the look draws on the WOPR terminal and NORAD big board from *WarGames* (1983).
 
@@ -6,19 +6,52 @@ A turn-based nuclear-strategy game in a single HTML file. Gameplay draws on *Nuc
 
 ---
 
+## ARGUS
+
+The game's AI is **ARGUS**, short for *Autonomous Response & Global Unified Strategy*. It's named after the hundred-eyed watchman of Greek myth. ARGUS runs the briefings, asks the questions, keeps your psych profile, and narrates the simulation.
+
+## First Watch (first run)
+
+A new player starts in **First Watch**: 3 nations, 12 turns, a gentler AI and a smaller arsenal. ARGUS brings systems online one turn at a time, each with a short explanation card:
+
+| Turn | Comes online |
+|---|---|
+| 1 | Build (warhead research), diplomacy; the four-phase turn is explained |
+| 2 | ARGUS's questions, stability |
+| 3 | Intel sweep, cyber ops, fog of war |
+| 4 | Disinformation, regime collapse |
+| 5 | DEFCON, drone swarms, interceptors |
+| 6 | Nuclear strikes, the Doomsday Clock, hypersonics |
+| 7 | Early-warning alarms, world events |
+
+AI leaders follow the same schedule, so nobody can do something you can't. Locked systems are hidden from the HUD; the command bar teases only the next one. The secret ending is held back for the full game. Finishing First Watch (win or lose) unlocks the full simulation: 5 nations, 25 turns, every system from turn 1, and the Daily Directive.
+
+## The turn
+
+Every turn has four phases, shown in the HUD:
+
+1. **Briefing.** ARGUS reports: new systems, world events, a question or an early-warning alarm.
+2. **Orders.** You choose one action and a target. The order is staged, not executed; you can change it.
+3. **Simulation.** Press **EXECUTE TURN** (or Enter). Every nation carries out its orders in sequence. A progress strip shows whose move it is, and each step is headed in the log. Fast-forward is available.
+4. **Report.** An after-action summary: population change per nation, new or broken pacts, eliminations, your warheads and stability, DEFCON and the clock, and the key events.
+
+## Warhead lottery
+
+Every warhead has a rolled yield: 1 MT tactical, 5 MT city-buster, 10 MT metro, 25 MT regional, or 50 MT Tsar-class. Bigger yields are rarer. Researching warheads runs several programs, revealed one by one. Each program produces a random payload; about 7% fail outright and about 4% hit a 50 MT breakthrough. When you strike, you choose which yield to fire. Bigger bombs kill more and move the Doomsday Clock further. Any warhead can misfire (about 4%). Intel reveals a rival's yields, not just its warhead count.
+
 ## The loop
 
-1. **Boot.** A WOPR-style terminal. You log on (try `HELP GAMES`, or the old backdoor password from the film), Cassandra asks how you feel, then offers the game list. Ask for Global Thermonuclear War and it suggests chess instead.
+1. **Boot.** A WOPR-style terminal. You log on (try `HELP GAMES`, or the old backdoor password from the film), ARGUS asks how you feel, then offers the game list. Ask for Global Thermonuclear War and it suggests chess instead.
 2. **Pick a side.** There are 10 leaders with pun names. Each runs a fictional nation and has its own perk, starting arsenal, and AI personality.
 3. **Play turns.** You get one action per turn. Then each AI leader acts, then the world updates.
-4. **Answer Cassandra.** Most turns open with a dilemma, a negotiation, or an early-warning alarm. Your answers change stats, AI relations, your psych profile, and which ending you can reach.
+4. **Answer ARGUS.** Most turns open with a dilemma, a negotiation, or an early-warning alarm. Your answers change stats, AI relations, your psych profile, and which ending you can reach.
 5. **Debrief.** The end screen shows the outcome, your psych profile, an XP count-up, rank and unlock progress, near-misses, and a classified dossier to decrypt.
 
 ### Actions
 | Key | Action | What it does |
 |---|---|---|
-| 1 | Build | Warheads, hypersonics (~90% get through shields) or interceptors |
-| 2 | Nuclear strike | Fire 1, 3, or 6 warheads, or 1 hypersonic. At DEFCON 3+ it counts as a **first strike**, and every nation turns on you. |
+| 1 | Build | Research warheads (random yields), hypersonics (~90% get through shields) or interceptors |
+| 2 | Nuclear strike | Fire one warhead of a chosen yield, a salvo of your 3 or 6 largest, or a hypersonic. At DEFCON 3+ it counts as a **first strike**, and every nation turns on you. |
 | 3 | Drone swarm | Conventional counterforce strike. Destroys interceptors and warheads; DEFCON −1. |
 | 4 | Cyber op | Knocks out shields, sabotages warheads, or causes a blackout, plus 3 turns of intel. |
 | 5 | Disinfo | Steals a share of a rival's population and drains their stability. At 0 stability the regime collapses. |
@@ -43,7 +76,7 @@ A turn-based nuclear-strategy game in a single HTML file. Gameplay draws on *Nuc
 | Midnight | The Doomsday Clock hits zero, and everyone loses |
 | **A Strange Game** *(secret)* | Never fire a nuke, hold pacts with every survivor, earn deep trust (relations ≥ 60, from turn 8). Then disarm at the Geneva summit and **do nothing** when the alarm says 214 ICBMs are inbound. |
 
-### Cassandra's questions
+### ARGUS's questions
 There are 17 dilemmas, each with 2–3 choices. Examples: pre-delegated "dead hand" launch authority, fabricated WMD evidence, disarmament protests, a drunk 3 AM red-phone call, giving the AI autonomous launch authority, bunker seat allocation, deepfakes, warhead tests, refugees, spies, coup plots, famine, a Mars-shuttle seat. Some have delayed consequences: an exposed lie hurts two turns later, and an ignored coup plot strikes the next turn.
 
 **Petrov moments.** A false alarm gives you 15 seconds to retaliate or wait. Sometimes the attack is real.
@@ -58,12 +91,12 @@ These are standard progression and reward-loop techniques. None are predatory: t
 
 - **XP and 8 ranks** (Cadet → Professor). Leaders unlock at ranks. The bar fills with a count-up and a promotion fanfare.
 - **Ghost Protocol.** Four historical dictators show up as opponents but are locked as player choices. Eliminate one yourself to unlock them ("defeat to unlock").
-- **Variable rewards.** After every game you decrypt a dossier with a random rarity (Confidential / Secret / Top Secret / Cosmic). Drops are lore files telling Cassandra's backstory, or terminal skins. The first decrypt is guaranteed Top Secret.
+- **Variable rewards.** After every game you decrypt a dossier with a random rarity (Confidential / Secret / Top Secret / Cosmic). Drops are lore files telling ARGUS's backstory, or terminal skins. The first decrypt is guaranteed Top Secret.
 - **Collections.** 20 achievements (one secret), 12 lore files, 6 skins, 8 psych archetypes.
 - **Daily Directive.** A seeded world with a daily modifier, the same for everyone that day. ×1.5 XP on first completion, and a streak bonus up to +50% XP. A missed day halves the streak instead of resetting it.
 - **Near-miss feedback.** Shows the roll you needed versus what you got ("SO CLOSE"), plus an end-screen list of nearly-earned goals.
 - **Moment-to-moment feedback.** XP toasts, multi-intercept callouts, banners, screen shake, CRT flashes, and synthesized audio.
-- **Personal memory.** Cassandra greets you with your last session ("you launched 14 warheads… I remember"), and your lifetime profile shapes how the next world treats you.
+- **Personal memory.** ARGUS greets you with your last session ("you launched 14 warheads… I remember"), and your lifetime profile shapes how the next world treats you.
 - **Locked teasers.** Classified game modes in the boot menu hint at future builds.
 
 Progress is saved in `localStorage` (per browser). The game still works if storage is unavailable.
@@ -79,7 +112,8 @@ Progress is saved in `localStorage` (per browser). The game still works if stora
 | Combat & ops | `strike`, `detonate`, `eliminate`, `drones`, `cyber`, `disinfo`, `intelSweep`, diplomacy |
 | AI | `hostility`, `aiAct`, `aiDiplo`, `incomingDiplo` |
 | Questions | `DILEMMAS`, `falseAlarm`, `EVENTS`, `summit` |
-| Flow | `startTurn` → `playerTurn` → `aiTurns` → `endTurn`, `checkEnd` |
+| Flow | `startTurn` (briefing) → `getOrders` → `simulate` → `endTurn` → `turnReport`, `checkEnd` |
+| Yields & First Watch | `YIELDS`, `research`, `takeWarheads`, `FIRST_RUN`, `has()` feature gates |
 | Meta | `showEnd`, `decrypt`, select screen, panels, boot terminal |
 
 ### Balance testing
@@ -90,7 +124,9 @@ npm i -D playwright   # once
 node tools/balance-sim.js mixed 100
 ```
 
-Current baseline, wins = victory + superpower: random ≈12%, hawk/smart ≈17%, mixed (pacts plus picking off the weak) ≈29%. A scripted, path-aware dove reaches the secret ending in about 30% of runs. A human who doesn't know the path should find it rarely.
+Add `first` as a third argument to simulate First Watch.
+
+Beta baseline, standard mode, wins = victory + superpower: random ≈8%, hawk ≈6%, mixed (pacts plus picking off the weak) ≈19%. A scripted, path-aware dove reaches the secret ending in about 25% of runs; a human who doesn't know the path should find it rarely. First Watch is deliberately gentle: very few nukes fly and almost no nation is eliminated within 12 turns.
 
 ---
 

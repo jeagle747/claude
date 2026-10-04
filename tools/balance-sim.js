@@ -1,5 +1,5 @@
 const { chromium } = require('playwright');
-// Headless balance simulator. Usage: node tools/balance-sim.js <random|hawk|smart|mixed|peace> [games]
+// Headless balance simulator. Usage: node tools/balance-sim.js <random|hawk|smart|mixed|peace> [games] [first]
 // Drives the real game code through window.SG with animations off and a scripted player.
 (async()=>{
   const b = await chromium.launch();
@@ -9,8 +9,10 @@ const { chromium } = require('playwright');
   await p.waitForTimeout(500);
   const strat = process.argv[2]||'random';
   const N = +(process.argv[3]||60);
-  const res = await p.evaluate(async ({strat,N})=>{
+  const FIRST = process.argv[4]==='first';
+  const res = await p.evaluate(async ({strat,N,FIRST})=>{
     SG.setSpeed(0);
+    SG.save().firstRunDone = !FIRST;
     const out=[];
     const _det=detonate; window.__h={p:0,a:0};
     detonate=function(a,t){ if(t.isPlayer) __h.p++; else __h.a++; return _det(a,t); };
@@ -83,13 +85,14 @@ const { chromium } = require('playwright');
         onEnd(r){done(r);}
       };
       const id=ids[g%ids.length];
+      SG.save().firstRunDone = !FIRST;
       SG.start(id,false);
       __h={p:0,a:0};
       const r=await pr; r.id=id; r.hp=__h.p; r.ha=__h.a; r.aiDead=SG.G.nations.filter(n=>!n.isPlayer&&!n.alive).length; r.byP=SG.G.nations.filter(n=>!n.isPlayer&&!n.alive&&n.killedBy===0).length; r.stab=SG.G.nations[0].stab; out.push(r);
       await new Promise(r=>setTimeout(r,0));
     }
     return out;
-  },{strat,N});
+  },{strat,N,FIRST});
   const tally={}; let turns=0,pacts=0;
   res.forEach(r=>{tally[r.res]=(tally[r.res]||0)+1;turns+=r.turn;pacts+=r.pacts;});
   console.log(strat,'games',res.length,tally,'avgTurn',(turns/res.length).toFixed(1),'avgMaxPacts',(pacts/res.length).toFixed(2),'avgClockEnd',(res.reduce((s,r)=>s+r.clock,0)/res.length).toFixed(0));
