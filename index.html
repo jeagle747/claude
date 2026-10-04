@@ -394,6 +394,7 @@ h3.sect{margin:4px 0 0;font-size:13px;letter-spacing:.25em;color:var(--muted);fo
     <div class="pstrip">
       <div><label>CALLSIGN</label><b id="p-name">—</b></div>
       <div><label id="p-rank">CADET</label><div class="xpbar"><i id="p-xpfill"></i></div><small id="p-xptext"></small></div>
+      <div><label>CLEARANCE</label><b id="p-clr">—</b> <small id="p-clrnext"></small></div>
       <div><label>DAILY STREAK</label><b id="p-streak">0</b> <small id="p-streakbonus"></small></div>
       <div class="ptools">
         <button class="btn sm" id="b-help1">? HOW TO PLAY</button>
@@ -521,7 +522,7 @@ function cssVar(n){return getComputedStyle(document.body).getPropertyValue(n).tr
 const SAVE_KEY='strangegame.v1';
 const defaultSave=()=>({name:null,xp:0,unlocked:['trumpet','putinov','jinpooh','jongfun'],ach:{},dossiers:[],skins:['green'],skin:'green',archetypes:[],streak:0,lastDaily:null,games:0,wins:0,best:0,lifePsy:{agg:0,dec:0,cau:0},last:null,muted:false,lastLeader:null,introSeen:false,decrypts:0,firstRunDone:false});
 function loadSave(){try{const s=JSON.parse(localStorage.getItem(SAVE_KEY)||'null');return Object.assign(defaultSave(),s||{});}catch(e){return defaultSave();}}
-let SAVE=loadSave();if(SAVE.firstRunDone===false&&SAVE.games>0&&!SAVE.firstRunMigrated){SAVE.firstRunDone=true;SAVE.firstRunMigrated=true;}
+let SAVE=loadSave();if(SAVE.stdDone==null)SAVE.stdDone=Math.max(0,(SAVE.games||0)-1);if(!SAVE.habits)SAVE.habits={};if(!SAVE.seenProto)SAVE.seenProto=[];if(SAVE.firstRunDone===false&&SAVE.games>0&&!SAVE.firstRunMigrated){SAVE.firstRunDone=true;SAVE.firstRunMigrated=true;}
 function persist(){try{localStorage.setItem(SAVE_KEY,JSON.stringify(SAVE));}catch(e){}}
 const NAME=()=>SAVE.name||'PROFESSOR';
 
@@ -589,6 +590,19 @@ const LEADERS=[
  perk:{key:'amok',name:'LORD OF ALL BEASTS',desc:'Rivals underestimate you and target you last.'},
  lines:{greet:'HIS EXCELLENCY, LORD OF ALL THE BEASTS OF THE EARTH AND FISHES OF THE SEA, GREETS YOU.',accept:'I AWARD MYSELF A MEDAL FOR THIS TREATY.',reject:'I HAVE ALREADY AWARDED MYSELF VICTORY.',threat:'I CONQUERED THE BRITISH EMPIRE. YOU ARE MUCH SMALLER.',hit:'MORE MEDALS! THE MEDALS WILL ABSORB THE BLAST.',fallen:'RETIRING TO A VILLA. FOR LIFE.',betray:'TREATY? I GAVE IT A MEDAL AND RETIRED IT.'}},
 ];
+/* Lines leaders use once the Doomsday Clock falls: the jokes stop. */
+const DARK={
+ trumpet:{greet:'I USED TO SAY NOBODY DOES IT BETTER. NOBODY SHOULD HAVE DONE THIS AT ALL.',hit:'THERE IS NO DEAL FOR THIS. THERE WAS NEVER A DEAL FOR THIS.',fallen:'TELL THEM IT WASN\'T SUPPOSED TO BE REAL.'},
+ putinov:{greet:'HISTORY WILL NOT JUDGE US. THERE WILL BE NO ONE LEFT TO WRITE IT.',hit:'MY GRANDFATHER SURVIVED A SIEGE. I DID NOT EXPECT TO END ONE.',fallen:'THE CLOCKS IN THE CAPITAL HAVE STOPPED.'},
+ jinpooh:{greet:'WE PLANNED FOR A HUNDRED YEARS. WE DID NOT PLAN FOR THIS.',hit:'THE CAMERAS STILL WORK. THERE IS NOTHING LEFT TO WATCH.',fallen:'THE RIVER IS STILL. THE CITIES ARE STILL.'},
+ jongfun:{greet:'THE PARADES ARE OVER. EVEN THE GENERALS ARE QUIET.',hit:'THEY TOLD ME THE MISSILES WOULD PROTECT US.',fallen:'THE STATUES ARE THE ONLY THINGS STILL STANDING.'},
+ macroni:{greet:'THERE IS NO ELEGANT WAY TO SAY IT. WE ARE ENDING THE WORLD.',hit:'THE CAPITAL IS DARK. I DID NOT THINK I WOULD LIVE TO SAY THAT.',fallen:'SOMEONE, PLEASE, REMEMBER US KINDLY.'},
+ muskrat:{greet:'THE ROCKETS ARE FUELED. THERE ARE NOT ENOUGH SEATS.',hit:'NO PATCH FOR THIS. NO ROLLBACK.',fallen:'I WANTED US TO BE A MULTIPLANETARY SPECIES. WE WERE BARELY ONE.'},
+ stalemate:{greet:'I HAVE SEEN WINTER. THIS IS SOMETHING ELSE.',hit:'THERE IS NO FRONT LINE. THERE IS ONLY ASH.',fallen:'NOBODY WINS A STALEMATE. I KNOW THAT NOW.'},
+ mussolinguini:{greet:'NO BALCONY. NO CROWD. ONLY SIRENS.',hit:'THE SQUARES ARE EMPTY. I GAVE MY LAST SPEECH TO NO ONE.',fallen:'IT WAS ALL THEATRE. AND THE THEATRE IS ON FIRE.'},
+ gaddafty:{greet:'THE DESERT WAS ALWAYS QUIET. NOW THE WHOLE WORLD IS.',hit:'A TENT DOES NOT KEEP OUT THE FALLOUT.',fallen:'LET THE SAND COVER IT ALL.'},
+ idiamok:{greet:'I HAVE NO MORE MEDALS TO GIVE. NO ONE TO GIVE THEM TO.',hit:'THE LAKE GLOWS AT NIGHT NOW. THE FISHERMEN DO NOT GO OUT.',fallen:'PRESIDENT FOR LIFE. THERE IS NOT MUCH LIFE LEFT.'},
+};
 const RANKS=[{xp:0,name:'CADET'},{xp:300,name:'LIEUTENANT'},{xp:800,name:'CAPTAIN'},{xp:1600,name:'MAJOR'},{xp:2800,name:'COLONEL'},{xp:4500,name:'GENERAL'},{xp:7000,name:'SUPREME COMMANDER'},{xp:10000,name:'PROFESSOR'}];
 const rankOf=xp=>{let r=0;RANKS.forEach((k,i)=>{if(xp>=k.xp)r=i;});return r;};
 const ACH=[
@@ -676,8 +690,16 @@ const FIRST_RUN=[
  {turn:6,feats:['strike','clock','hyper'],title:'NUCLEAR RELEASE AUTHORITY',text:"YOU NOW HOLD NUCLEAR RELEASE AUTHORITY.\n\nEVERY DETONATION MOVES THE DOOMSDAY CLOCK TOWARD MIDNIGHT. BIGGER YIELDS MOVE IT FURTHER. AT MIDNIGHT, EVERYONE LOSES.\n\nLAUNCHING WHILE DEFCON IS 3 OR HIGHER IS A FIRST STRIKE — EVERY NATION WILL TURN ON YOU. HYPERSONICS ALMOST ALWAYS GET THROUGH SHIELDS. WARHEADS SOMETIMES MISFIRE."},
  {turn:7,feats:['alarm','events'],title:'EARLY WARNING',text:"EARLY WARNING IS ONLINE. MY SENSORS ARE NOT PERFECT. WHEN AN ALARM SOUNDS, YOU WILL HAVE SECONDS TO DECIDE.\n\nWORLD EVENTS WILL NOW OCCUR.\n\nEVERY SYSTEM IS ONLINE. FROM HERE ON, YOU ARE ON YOUR OWN."},
 ];
+const PROTOCOLS=[
+ {id:'subs',need:1,name:'BALLISTIC SUBMARINES',text:"A NEW BUILD OPTION: BALLISTIC SUBMARINES (UP TO 3).\n\nEACH SUBMARINE HIDES 2 OF YOUR WARHEADS FROM DRONES AND SABOTAGE, AND FIRES ONE WARHEAD BACK AT ANYONE WHO NUKES YOU — EVEN IF YOU DID NOTHING. RIVALS THINK TWICE ABOUT ATTACKING A NATION WITH SUBMARINES.\n\nYOUR RIVALS CAN BUILD THEM TOO."},
+ {id:'covert',need:2,name:'COVERT OPERATIONS',text:"A NEW ACTION (KEY 8): COVERT OP.\n\nPLANT A MOLE — PERMANENT INTEL ON ONE NATION.\nSTEAL A DESIGN — COPY THEIR LARGEST WARHEAD.\nINCITE A COUP — THEIR STABILITY -25.\n\nFAILED OPERATIONS ARE OFTEN TRACED BACK TO YOU."},
+ {id:'crises',need:3,name:'GLOBAL CRISES',text:"EVERY 5–7 TURNS THE WORLD WILL FACE A CRISIS THAT HITS EVERY NATION AT ONCE: ORBITAL WEAPONS, GRID COLLAPSE, FAMINE, EMERGENCY UN VOTES, AND THINGS I CANNOT PREDICT.\n\nYOUR ANSWER SHAPES HOW THE WHOLE WORLD MOVES."},
+ {id:'adaptive',need:5,name:'ADAPTIVE LEADERS',text:"YOUR RIVALS NOW STUDY YOU. THEY KNOW WHAT YOU DID IN YOUR LAST GAMES AND IN THIS ONE.\n\nRELY ON ONE TACTIC AND THEY WILL COUNTER IT: SHIELDS MEET HYPERSONICS, CHARM MEETS SUSPICION, CYBER MEETS FIREWALLS, AND NUKES MEET COALITIONS."},
+];
+const clearance=()=>SAVE.firstRunDone?1+PROTOCOLS.filter(p=>(SAVE.stdDone||0)>=p.need).length:0;
+const proto=id=>!!G&&!G.firstRun&&!!G.protocols&&G.protocols.has(id);
 const featTurn=f=>{const s=FIRST_RUN.find(s=>s.feats.includes(f));return s?s.turn:1;};
-const has=f=>!G||!G.firstRun||G.gate.has(f);
+const has=f=>f==='covert'?proto('covert'):(!G||!G.firstRun||G.gate.has(f));
 
 /* =====================================================================
    GAME STATE HELPERS
@@ -692,20 +714,26 @@ function addRelBoth(a,b,v){addRel(a,b,v);addRel(b,a,v);}
 function allRelTo(n,v){others(n).forEach(o=>addRel(o,n,v));}
 function allPairs(v){for(const a of alive())for(const b of alive())if(a!==b)addRel(a,b,v);}
 const isPact=(a,b)=>!!G.pact[a.idx][b.idx];
-function setPact(a,b,v){G.pact[a.idx][b.idx]=G.pact[b.idx][a.idx]=v;}
+function setPact(a,b,v){G.pact[a.idx][b.idx]=G.pact[b.idx][a.idx]=v;if(v&&G.pactEnd){G.pactEnd[a.idx+'-'+b.idx]=G.pactEnd[b.idx+'-'+a.idx]=G.turn+rint(6,9);}}
 const perk=(n,k)=>n.L.perk.key===k;
-const seen=n=>n.isPlayer||n.intel>0||G.flags.sat||perk(P(),'orbital')||G.flags.mole===n.idx;
+const seen=n=>n.isPlayer||n.intel>0||G.flags.sat||perk(P(),'orbital')||G.flags.mole===n.idx||(G.moles&&G.moles.has(n.idx));
 const pactCount=n=>others(n).filter(o=>isPact(n,o)).length;
 const PSY_NAMES={agg:'AGGRESSION',dec:'DECEPTION',cau:'CAUTION'};
 function psy(d){if(!d)return'';const parts=[];for(const k of['agg','dec','cau']){if(d[k]){G.psy[k]+=d[k];if(Math.abs(d[k])>=1)parts.push(`${PSY_NAMES[k]} ${d[k]>0?'▲':'▼'}`);}}return parts.join(' · ');}
 function setDefcon(v){if(!has('defcon'))return;const old=G.defcon;G.defcon=clamp(v,1,5);if(G.defcon===old)return;
- if(G.defcon<old){G.quiet=0;if(G.defcon===1){banner('DEFCON 1','red');AU.alarm();log('DEFCON 1. MAXIMUM READINESS. NUCLEAR WAR IS IMMINENT OR UNDER WAY.','alert');}else log(`DEFCON ${G.defcon}.`,'warn');}
- else log(`DEFCON ${G.defcon}. TENSIONS EASE.`,'good');refresh();}
+ if(G.defcon<old){G.quiet=0;if(G.defcon===1){banner('DEFCON 1','red');AU.alarm();log(G.saidD1?vary(['DEFCON 1 AGAIN.','BACK TO DEFCON 1.','DEFCON 1. THE SILOS ARE OPEN AGAIN.']):'DEFCON 1. MAXIMUM READINESS. NUCLEAR WAR IS IMMINENT OR UNDER WAY.','alert');G.saidD1=1;}else log(`DEFCON ${G.defcon}.`,'warn');}
+ else log(vary([`DEFCON ${G.defcon}. TENSIONS EASE.`,`DEFCON ${G.defcon}. THE WORLD EXHALES, A LITTLE.`,`DEFCON ${G.defcon}. CREWS STAND DOWN FROM THEIR STATIONS.`]),'good');refresh();}
 function gainXP(v,why){G.xp+=v;toast(`+${v} XP`,why,'xp');renderHUD();}
 function unlock(id){if(SAVE.ach[id])return;const a=ACH.find(x=>x.id===id);if(!a)return;SAVE.ach[id]=Date.now();
  if(G&&!G.over){G.newAch.push(id);G.xp+=a.xp;renderHUD();}else{SAVE.xp+=a.xp;if(G)G.newAch.push(id);}
  persist();AU.chime();toast('ACHIEVEMENT UNLOCKED',`${a.name} · +${a.xp} XP`,'ach');}
-function quote(n,key){log(`${n.L.name}: «${n.L.lines[key]}»`,'quote');}
+const clockTier=()=>!G?0:G.clock>60?0:G.clock>30?1:2;
+function line(n,key){const d=!n.junta&&DARK[n.id]&&DARK[n.id][key],t=clockTier();return d&&(t===2||(t===1&&Math.random()<.5))?d:n.L.lines[key];}
+const REACT={hit:['{L} ADDRESSES THE NATION FROM A BUNKER.','{N} STATE TV CUTS TO A BLANK SCREEN.','{L} VOWS THAT THIS WILL BE ANSWERED.','CROWDS GATHER OUTSIDE {N}\'S HOSPITALS.','{N} DECLARES THREE DAYS OF MOURNING.'],betray:['{L} SAYS NOTHING. THE SILENCE SAYS ENOUGH.'],fallen:['{N} GOES SILENT ON EVERY CHANNEL.']};
+function quote(n,key){const l=line(n,key),k=n.idx+':'+l;G.quoted=G.quoted||new Set();
+ if(!G.quoted.has(k)){G.quoted.add(k);log(`${n.L.name}: «${l}»`,'quote');return;}
+ if(REACT[key]&&chance(.6))log(vary(REACT[key]).replace('{L}',n.L.name).replace('{N}',n.name),'quote');}
+const vary=a=>a[Math.floor(Math.random()*a.length)];
 
 /* =====================================================================
    WORLD MAP — dot-matrix continents on a canvas, NORAD style
@@ -927,6 +955,7 @@ function renderNations(){const box=$('#nations');if(!G){box.innerHTML='';return;
   const tag=n.isPlayer?'<span class="tag me">YOU</span>':!n.alive?`<span class="tag bad">${n.cause==='collapse'?'COLLAPSED':'DESTROYED'}</span>`:relTag(n);
   const stats=[`<span title="Nuclear warheads">WARHEADS <b>${wh}</b></span>`];
   if(has('hyper'))stats.push(`<span title="Hypersonic glide vehicles: nearly impossible to intercept">HYPER <b>${hy}</b></span>`);
+  if(proto('subs'))stats.push(`<span title="Ballistic submarines: hide 2 warheads each and fire back automatically">SUBS <b>${kn?(n.subs||0):'?'}</b></span>`);
   if(has('shield'))stats.push(`<span title="Missile interceptors">SHIELD <b>${sh}</b>${n.shieldDown>0||G.flags.solar?'<em>OFFLINE</em>':''}</span>`);
   c.innerHTML=`<div class="n-head">${sel?`<span class="n-key">${k}</span>`:''}${tgt?'<span class="n-key tgtk">TARGET</span>':''}<b>${esc(n.name)}</b>${tag}</div>
    <div class="n-leader">${esc(n.L.title)} ${esc(n.L.name)}${!n.isPlayer&&n.alive&&kn?' · <span style="color:var(--cyan)">INTEL</span>':''}</div>
@@ -961,9 +990,9 @@ async function strike(a,t,n,hyper=false,opts={}){
    if(intercepted){ints++;AU.zap();MAP.text(t.idx,'INTERCEPTED',MAP.col.cyan||'#29e0ff');return;}
    hits++;kills+=detonate(a,t,mt);}));});
  await Promise.all(jobs);
- if(duds)log(`${duds} WARHEAD${duds>1?'S':''} MISFIRED AND FELL INTO THE SEA.`,'dim');
- if(ints)log(`${t.name} INTERCEPTS ${ints} OF ${count}.`,t.isPlayer?'good':'dim');
- if(hits)log(`${hits} DETONATION${hits>1?'S':''} OVER ${t.name}. ${kills.toFixed(1)} MILLION DEAD.`,'alert');
+ if(duds)log(vary([`${duds} WARHEAD${duds>1?'S':''} MISFIRED AND FELL INTO THE SEA.`,`${duds} MISSILE${duds>1?'S':''} FAILED IN THE BOOST PHASE.`,`${duds} WARHEAD${duds>1?'S':''} NEVER ARMED. A FACTORY FLAW.`]),'dim');
+ if(ints)log(vary([`${t.name} INTERCEPTS ${ints} OF ${count}.`,`${t.name}'S INTERCEPTORS STOP ${ints} OF ${count} IN MID-AIR.`,`${ints} OF ${count} ARE DESTROYED OVER ${t.name}'S COAST.`]),t.isPlayer?'good':'dim');
+ if(hits)log(vary([`${hits} DETONATION${hits>1?'S':''} OVER ${t.name}. ${kills.toFixed(1)} MILLION DEAD.`,`${t.name} LOSES ${kills.toFixed(1)} MILLION PEOPLE IN ${hits} BLAST${hits>1?'S':''}.`,`${hits} ${hits>1?'CITIES':'CITY'} IN ${t.name} ${hits>1?'ARE':'IS'} GONE. ${kills.toFixed(1)} MILLION DEAD.`]),'alert');
  if(t.isPlayer&&ints){G.stats.intercepts+=ints;if(ints>=3)toast(ints>=4?'QUAD INTERCEPT':'TRIPLE INTERCEPT','YOUR SHIELD HELD','xp');if(G.stats.intercepts>=8)unlock('ironsky');}
  if(a.isPlayer&&kills>=25)banner('CATASTROPHIC','red');
  addRel(t,a,-40);others(a).forEach(o=>{if(o!==t)addRel(o,a,-4);});
@@ -971,9 +1000,10 @@ async function strike(a,t,n,hyper=false,opts={}){
  if(hits&&t.pop>.5&&!t.isPlayer)quote(t,'hit');
  refresh();
  if(t.pop<=Math.max(.5,t.pop0*.1)){if(t.pop>.5)log(`${t.name} IS BELOW 10% OF ITS POPULATION. SOCIETY COLLAPSES.`,'alert');await eliminate(t,'nuked',a);}
+ else if(hits&&(t.subs||0)>0&&t.warheads>0&&a.alive&&!opts.counter&&!G.over){const k=Math.min(t.subs,t.warheads);log(`${t.name}'S SUBMARINES ANSWER AUTOMATICALLY: ${k} WARHEAD${k>1?'S':''} FROM THE DEEP.`,'alert');await strike(t,a,k,false,{mode:'max',rogue:true,counter:true});}
  checkEnd();}
 const yfrac=mt=>clamp(.03+.005*mt,0,.26);
-function interceptP(t,hyper){if(t.shieldDown>0||G.flags.solar||t.shield<=0)return 0;let p=hyper?.1:clamp(.2+t.shield*.055,0,.78);if(!hyper&&perk(t,'autonomy'))p=Math.min(.88,p*1.25);return p;}
+function interceptP(t,hyper){if(t.shieldDown>0||G.flags.solar||t.shield<=0)return 0;let p=hyper?.1:clamp(.2+t.shield*.055,0,.78);if(t.isPlayer&&G.flags.scramble)p=Math.min(.92,p+.25);if(!hyper&&perk(t,'autonomy'))p=Math.min(.88,p*1.25);return p;}
 function detonate(a,t,mt=10){let k=1+t.pop0*yfrac(mt)*rnd(.8,1.2);if(perk(t,'scorched'))k*=.8;if(t.isPlayer&&G.flags.lottery)k*=.9;
  k=Math.min(k,t.pop);t.pop-=k;t.stab=Math.max(0,t.stab-3);G.clock-=.5+.07*mt;
  AU.boom();MAP.boom(t.idx,mt>=25);MAP.text(t.idx,`${mt}MT  -${k.toFixed(1)}M`,MAP.col.red||'#ff3355');if(t.isPlayer)shake();
@@ -1000,31 +1030,31 @@ async function betray(a,b){setPact(a,b,false);addRel(b,a,-50);others(a).forEach(
  if(!a.isPlayer)quote(a,'betray');if(b.isPlayer){unlock('ettu');AU.bad();}if(a.isPlayer)psy({dec:2});refresh();}
 
 async function drones(a,t){if(isPact(a,t))await betray(a,t);
- log(`${a.name} SENDS A DRONE SWARM AGAINST ${t.name}.`,'warn');setDefcon(G.defcon-1);AU.swarm();
+ log(vary([`${a.name} SENDS A DRONE SWARM AGAINST ${t.name}.`,`HUNDREDS OF ${a.name} DRONES CROSS INTO ${t.name}'S AIRSPACE.`,`${a.name} LAUNCHES A NIGHT DRONE RAID ON ${t.name}'S MISSILE BASES.`,`A ${a.name} DRONE SWARM HITS ${t.name}'S AIR DEFENSES.`]),'warn');setDefcon(G.defcon-1);AU.swarm();
  await MAP.swarm(a.idx,t.idx,a.L.color);
  const mit=(t.shieldDown<=0&&!G.flags.solar)?Math.min(.5,t.shield*.05):0;
- const sd=Math.min(t.shield,rint(1,3)),wd=chance(1-mit)?Math.min(t.warheads,rint(1,2)):0,pk=rnd(.4,1.8)*(1-mit);
+ const sd=Math.min(t.shield,rint(1,3)),wd=chance(1-mit)?Math.min(Math.max(0,t.warheads-(t.subs||0)*2),rint(1,2)):0,pk=rnd(.4,1.8)*(1-mit);
  t.shield-=sd;t.warheads-=wd;t.pop=Math.max(0,t.pop-pk);t.stab=Math.max(0,t.stab-3);
  addRel(t,a,-20);others(a).forEach(o=>{if(o!==t)addRel(o,a,-3);});
- log(`  ${sd} INTERCEPTOR SITE${sd===1?'':'S'} AND ${wd} WARHEAD${wd===1?'':'S'} DESTROYED IN ${t.name}. ${pk.toFixed(1)}M CASUALTIES.`,t.isPlayer?'alert':'warn');
+ log(vary([`${sd} INTERCEPTOR SITE${sd===1?'':'S'} AND ${wd} WARHEAD${wd===1?'':'S'} DESTROYED IN ${t.name}. ${pk.toFixed(1)}M CASUALTIES.`,`${t.name} LOSES ${sd} INTERCEPTOR SITE${sd===1?'':'S'} AND ${wd} WARHEAD${wd===1?'':'S'}. ${pk.toFixed(1)}M CASUALTIES.`,`DAMAGE IN ${t.name}: ${sd} DEFENSE SITE${sd===1?'':'S'}, ${wd} WARHEAD${wd===1?'':'S'}, ${pk.toFixed(1)}M PEOPLE.`]),t.isPlayer?'alert':'warn');
  MAP.text(t.idx,`-${wd} WH`,MAP.col.amber||'#ffb627');if(t.isPlayer)shake();refresh();
  if(t.pop<=Math.max(.5,t.pop0*.1))await eliminate(t,'nuked',a);}
 
-function cyberOdds(a,t){let p=.55;if(perk(a,'hybrid'))p+=.2;if(perk(a,'orbital'))p+=.15;if(perk(t,'orbital'))p-=.1;if(a.isPlayer&&G.flags.scientists)p+=.05;return clamp(p,.1,.92);}
+function cyberOdds(a,t){let p=.55;if(a.isPlayer)p-=(1-fatigue('cyber'))*.4;if(a.isPlayer&&proto('adaptive')&&habitTop()==='cyber')p-=.15;if(perk(a,'hybrid'))p+=.2;if(perk(a,'orbital'))p+=.15;if(perk(t,'orbital'))p-=.1;if(a.isPlayer&&G.flags.scientists)p+=.05;return clamp(p,.1,.92);}
 async function cyber(a,t){AU.data();await MAP.beam(a.idx,t.idx,'#3dffa8');const p=cyberOdds(a,t),r=rand();
  if(r<p){const kind=pick(['shield','sabotage','blackout']);let msg;
   if(kind==='shield'){t.shieldDown=2;msg=`${t.name}'S MISSILE DEFENSE GRID IS OFFLINE FOR 2 TURNS.`;}
-  else if(kind==='sabotage'){const k=Math.min(t.warheads,rint(1,3));t.warheads-=k;msg=`${k} WARHEAD${k===1?'':'S'} IN ${t.name} BRICKED BY MALWARE.`;}
+  else if(kind==='sabotage'){const k=Math.min(Math.max(0,t.warheads-(t.subs||0)*2),rint(1,3));t.warheads-=k;msg=`${k} WARHEAD${k===1?'':'S'} IN ${t.name} BRICKED BY MALWARE.`;}
   else{t.stab=Math.max(0,t.stab-15);t.lastStabBy=a.idx;msg=`${t.name} SUFFERS A NATIONWIDE BLACKOUT. STABILITY -15.`;}
   if(a.isPlayer){t.intel=Math.max(t.intel,G.mod&&G.mod.id==='fog'?1:3);G.stats.cyber++;if(G.stats.cyber>=4)unlock('ghost');log(`CYBER OP SUCCEEDS (ROLL ${Math.floor(r*100)} UNDER ${Math.round(p*100)}). ${msg} ARSENAL INTEL ACQUIRED.`,'good');}
   else log(`CYBER ATTACK FROM ${a.name}: ${msg}`,t.isPlayer?'alert':'warn');}
  else{const det=chance(.5);if(det){addRel(t,a,-20);if(chance(.35))setDefcon(G.defcon-1);}
   if(a.isPlayer)log(`CYBER OP FAILS (ROLL ${Math.floor(r*100)}, NEEDED UNDER ${Math.round(p*100)})${Math.floor(r*100)-Math.round(p*100)<8?' — SO CLOSE':''}. ${det?`${t.name} TRACED IT TO YOU.`:'NO ATTRIBUTION.'}`,'warn');
   else if(t.isPlayer)log(`YOUR FIREWALLS REPEL A CYBER ATTACK${det?` FROM ${a.name}`:''}.`,'good');
-  else log(`${a.name} PROBES ${t.name}'S NETWORKS.`,'dim');}
+  else log(vary([`${a.name} PROBES ${t.name}'S NETWORKS.`,`${t.name}'S FIREWALLS LOG A FAILED INTRUSION FROM ${a.name}.`,`A ${a.name} HACKING TEAM IS LOCKED OUT OF ${t.name}'S GRID.`]),'dim');}
  refresh();}
 
-function disinfoOdds(a,t){let p=.62-t.stab/300;if(perk(a,'hybrid'))p+=.2;if(perk(a,'balcony'))p+=.25;return clamp(p,.1,.92);}
+function disinfoOdds(a,t){let p=.62-t.stab/300;if(a.isPlayer)p-=(1-fatigue('disinfo'))*.4;if(a.isPlayer&&proto('adaptive')&&habitTop()==='disinfo')p-=.15;if(perk(a,'hybrid'))p+=.2;if(perk(a,'balcony'))p+=.25;return clamp(p,.1,.92);}
 async function disinfo(a,t){AU.data();await MAP.beam(a.idx,t.idx,'#ff2bd6');const p=disinfoOdds(a,t),r=rand();
  if(r<p){const mv=t.pop*rnd(.025,.05),sd=rint(8,15);t.pop-=mv;a.pop+=mv*.8;t.stab=Math.max(0,t.stab-sd);t.lastStabBy=a.idx;
   MAP.text(t.idx,`-${mv.toFixed(1)}M`,'#ff2bd6');
@@ -1032,23 +1062,38 @@ async function disinfo(a,t){AU.data();await MAP.beam(a.idx,t.idx,'#ff2bd6');cons
  else{if(chance(.4))addRel(t,a,-10);if(a.isPlayer)log(`DISINFO CAMPAIGN FIZZLES (ROLL ${Math.floor(r*100)}, NEEDED UNDER ${Math.round(p*100)}). NOBODY BELIEVED IT.`,'warn');else log(`${a.name} RUNS A FAILED INFLUENCE OPERATION IN ${t.name}.`,'dim');}
  refresh();}
 
-function intelSweep(){const p=P(),turns=G.mod&&G.mod.id==='fog'?1:3;others(p).forEach(o=>o.intel=Math.max(o.intel,turns));G.flags.alarmScreened=true;AU.data();
+const COVERT={mole:{name:'PLANT A MOLE',p:.6,desc:'PERMANENT INTEL'},steal:{name:'STEAL A DESIGN',p:.45,desc:'COPY THEIR LARGEST WARHEAD'},coup:{name:'INCITE A COUP',p:.4,desc:'THEIR STABILITY −25'}};
+const covertOdds=(k,t)=>clamp(COVERT[k].p-(1-fatigue('covert'))*.3-(proto('adaptive')&&habitTop()==='covert'?.15:0)-(t.junta?.1:0),.1,.9);
+async function covert(a,t,k){AU.data();await MAP.beam(a.idx,t.idx,'#b388ff');const o=covertOdds(k,t),r=rand();
+ if(r<o){if(k==='mole'){G.moles.add(t.idx);log(`OPERATION SUCCEEDS (ROLL ${Math.floor(r*100)} UNDER ${Math.round(o*100)}). A MOLE IN ${t.name}'S DEFENSE MINISTRY. YOU WILL SEE THEIR ARSENAL FOR THE REST OF THE GAME.`,'good');}
+  else if(k==='steal'){const m=t.arsenal.length?Math.max(...t.arsenal):10;a.arsenal.push(m);log(`OPERATION SUCCEEDS (ROLL ${Math.floor(r*100)} UNDER ${Math.round(o*100)}). ${t.name}'S ${m} MT DESIGN IS NOW YOURS. +1 WARHEAD (${m} MT).`,'good');}
+  else{t.stab=Math.max(0,t.stab-25);t.lastStabBy=a.idx;log(`OPERATION SUCCEEDS (ROLL ${Math.floor(r*100)} UNDER ${Math.round(o*100)}). RIOTS AND DEFECTIONS IN ${t.name}'S ARMY. STABILITY −25.`,'good');}}
+ else{const det=chance(.55);if(det){addRel(t,a,-30);setDefcon(G.defcon-1);}
+  log(`OPERATION FAILS (ROLL ${Math.floor(r*100)}, NEEDED UNDER ${Math.round(o*100)}). ${det?`YOUR AGENTS ARE CAUGHT. ${t.name} RELATIONS −30.`:'YOUR AGENTS GET OUT CLEAN.'}`,'warn');}
+ refresh();}
+function intelSweep(){const p=P(),turns=G.mod&&G.mod.id==='fog'?1:3;G.flags.lastIntel=G.turn;others(p).forEach(o=>o.intel=Math.max(o.intel,turns));G.flags.alarmScreened=true;AU.data();
  log(`INTEL SWEEP COMPLETE. EVERY ARSENAL REVEALED FOR ${turns} TURN${turns>1?'S':''}. EARLY-WARNING FILTERS CALIBRATED.`,'good');
  const th=others(p).map(o=>({o,h:hostility(o,p)})).sort((a,b)=>b.h-a.h)[0];
  if(th)log(`THREAT ASSESSMENT: ${th.o.name} IS THE MOST LIKELY TO MOVE AGAINST YOU${th.h>40?' — SOON':''}.`,'cass');refresh();}
 
 /* ---------------- diplomacy ---------------- */
+function habitTop(){const h={};for(const k in SAVE.habits)h[k]=(h[k]||0)+SAVE.habits[k];for(const k in G.habits)h[k]=(h[k]||0)+G.habits[k]*2;let best=null,bv=3;for(const k in h)if(h[k]>bv){bv=h[k];best=k;}return best;}
+const HABIT_TXT={shield:['INTERCEPTORS','THEY WILL ANSWER WITH HYPERSONICS'],diplo:['DIPLOMACY','YOUR CHARM WILL MEET SUSPICION (PACTS -20%)'],cyber:['CYBER OPS','THEIR FIREWALLS ARE READY (-15%)'],disinfo:['DISINFORMATION','THEIR CENSORS ARE READY (-15%)'],strike:['NUCLEAR STRIKES','THEY WILL GANG UP ON YOU'],warheads:['WARHEAD RESEARCH','THEY ASSUME YOU ARE PLANNING A WAR'],drones:['DRONE SWARMS','THEY WILL HARDEN THEIR SILOS'],intel:['INTEL SWEEPS','THEY WILL HIDE MORE'],hyper:['HYPERSONICS','THEY WILL BUILD MORE INTERCEPTORS'],subs:['SUBMARINES','THEY WILL HUNT THEM'],covert:['COVERT OPS','THEIR COUNTERINTELLIGENCE IS AWAKE']};
+const orderKey=a=>a.id+(typeof a.opt==='string'?':'+a.opt:'');
+function repeatCount(key){const L=G.lastOrders||[];let c=0;for(let i=L.length-1;i>=0&&L[i]===key;i--)c++;return c;}
+const fatigue=key=>[1,.75,.5,.35][Math.min(3,repeatCount(key))];
+const fatigueTag=key=>{const f=fatigue(key);return f<1?` · REPEATED: −${Math.round((1-f)*100)}%`:'';};
 const credibility=()=>clamp(1-Math.max(0,G.psy.dec)*.04-G.stats.caught*.1,.4,1);
 const strength=n=>n.warheads+n.hyper*2+n.shield*.5;
-function pactOdds(p,t){let o=.15+R(t,p)/90;if(perk(p,'deal'))o+=.2;if(perk(p,'autonomy'))o+=.1;if(G.defcon>=4)o+=.1;o-=t.L.ai.para*.15;if(R(t,p)<0)o*=.5;o*=credibility();return clamp(o,.03,.92);}
-function threatOdds(p,t){const r=strength(p)/(strength(t)+1);let o=.25+(r-1)*.3;if(perk(p,'parade'))o+=.1;o-=t.L.ai.agg*.15;return clamp(o,.08,.85);}
-function bluffOdds(p,t){let o=.45+Math.max(0,G.psy.dec)*.02-G.stats.caught*.15;if(perk(p,'deal'))o+=.1;if(perk(p,'parade'))o+=.15;if(perk(p,'greenbook'))o+=.1;if(perk(t,'orbital'))o-=.25;o-=t.L.ai.para*.1;return clamp(o,.05,.85);}
+function pactOdds(p,t){let o=.15+R(t,p)/90;if(perk(p,'deal'))o+=.2;if(perk(p,'autonomy'))o+=.1;if(G.defcon>=4)o+=.1;o-=t.L.ai.para*.15;if(R(t,p)<0)o*=.5;o*=credibility()*fatigue('diplo');if(proto('adaptive')&&habitTop()==='diplo')o*=.8;return clamp(o,.03,.92);}
+function threatOdds(p,t){const r=strength(p)/(strength(t)+1);let o=(.25+(r-1)*.3)*fatigue('diplo');if(perk(p,'parade'))o+=.1;o-=t.L.ai.agg*.15;return clamp(o,.08,.85);}
+function bluffOdds(p,t){let o=-(1-fatigue('diplo'))*.3+.45+Math.max(0,G.psy.dec)*.02-G.stats.caught*.15;if(perk(p,'deal'))o+=.1;if(perk(p,'parade'))o+=.15;if(perk(p,'greenbook'))o+=.1;if(perk(t,'orbital'))o-=.25;o-=t.L.ai.para*.1;return clamp(o,.05,.85);}
 function rollText(r,o){const R_=Math.floor(r*100),N=Math.round(o*100);return `ROLL ${R_} · NEEDED UNDER ${N}${R_>=N&&R_-N<8?' · SO CLOSE':''}`;}
 const DIPLO_MSG=['PROPOSE A NON-AGGRESSION PACT','THREATEN','BLUFF: DOOMSDAY DEVICE','SEND AID'];
 async function diploChoose(t){const p=P(),od={pact:pactOdds(p,t),threat:threatOdds(p,t),bluff:bluffOdds(p,t)};
- const v=await ask({kicker:`SECURE LINE // ${t.L.title} ${t.L.name}`,title:t.name,quote:{who:t.L.name,text:t.L.lines.greet},
+ const v=await ask({kicker:`SECURE LINE // ${t.L.title} ${t.L.name}`,title:t.name,quote:{who:t.L.name,text:line(t,'greet')},
   text:`THEY FEEL ${relWord(R(t,p))} TOWARD YOU. CHOOSE YOUR MESSAGE — IT IS DELIVERED WHEN YOU EXECUTE THE TURN.`,
-  choices:[{t:isPact(p,t)?'PACT ALREADY SIGNED':'PROPOSE A NON-AGGRESSION PACT',odds:od.pact,disabled:isPact(p,t)},{t:'THREATEN: "BACK DOWN OR BURN."',odds:od.threat},{t:'BLUFF: "WE HAVE A DOOMSDAY DEVICE."',odds:od.bluff},{t:'SEND AID (+10–18 RELATIONS, COSTS 6 STABILITY)',odds:1},{t:'HANG UP (CHOOSE ANOTHER ORDER)'}]});
+  choices:[{t:isPact(p,t)?`PACT ACTIVE · EXPIRES TURN ${G.pactEnd[t.idx+'-0']||'?'}`:'PROPOSE A NON-AGGRESSION PACT (LASTS 6–9 TURNS)',odds:od.pact,disabled:isPact(p,t)},{t:'THREATEN: "BACK DOWN OR BURN."',odds:od.threat},{t:'BLUFF: "WE HAVE A DOOMSDAY DEVICE."',odds:od.bluff},{t:`SEND AID (+10–18 RELATIONS, COSTS 6 STABILITY)${fatigueTag('diplo')}`,odds:1},{t:'HANG UP (CHOOSE ANOTHER ORDER)'}]});
  closeModal();const i=choiceIdx(v);return i===4?null:i;}
 async function playerDiplo(t,i){const p=P(),od={pact:pactOdds(p,t),threat:threatOdds(p,t),bluff:bluffOdds(p,t)};
  if(i===0&&isPact(p,t))return true;
@@ -1065,22 +1110,38 @@ async function playerDiplo(t,i){const p=P(),od={pact:pactOdds(p,t),threat:threat
  refresh();await result(txt,pt,i<3?rollText(r,i===0?od.pact:i===1?od.threat:od.bluff):null);return true;}
 function relWord(v){return v>=40?'FRIENDLY':v>=10?'CORDIAL':v>-10?'NEUTRAL':v>-40?'TENSE':'HOSTILE';}
 
-async function incomingDiplo(n){const p=P(),v=R(n,p);G.flags.incoming=G.turn;AU.select();
- if(v>20&&!isPact(n,p)){const o=await ask({kicker:`INCOMING // ${n.L.title} ${n.L.name}`,title:`${n.name} PROPOSES A PACT`,quote:{who:n.L.name,text:n.L.lines.greet},text:`${n.L.name} OFFERS A NON-AGGRESSION PACT. NEITHER SIDE WILL STRIKE THE OTHER.`,
+async function incomingDiplo(n){const p=P(),v=R(n,p);G.flags.incoming=G.turn;n.offerTurn=G.turn;AU.select();
+ const kinds=[];if(v>20&&!isPact(n,p))kinds.push('pact');if(v<-15)kinds.push('ultimatum');if(v>-20&&has('shield'))kinds.push('aid');if(v>-10)kinds.push('intel');if(v>0&&others(n).some(o=>o!==p&&R(n,o)<-20))kinds.push('ally');if(!kinds.length)kinds.push('intel');
+ const kind=pick(kinds);
+ if(kind==='aid'){const o=await ask({kicker:`REQUEST // ${n.L.title} ${n.L.name}`,title:`${n.name} ASKS FOR HELP`,quote:{who:n.L.name,text:line(n,'greet')},text:`${n.name} SAYS ITS AIR DEFENSES ARE FAILING. THEY ASK YOU FOR 2 INTERCEPTOR BATTERIES.`,
+   choices:[{t:'SEND THEM 2 INTERCEPTORS.',disabled:p.shield<2},{t:'REFUSE.'},{t:'SEND OBSOLETE BATTERIES AND CALL IT AID.'}]});
+  const i=choiceIdx(o);let txt,pt='';
+  if(i===0){p.shield-=2;n.shield+=2;addRel(n,p,20);pt=psy({agg:-1});txt=`${n.name} WILL REMEMBER THIS. RELATIONS +20.`;}
+  else if(i===1){addRel(n,p,-6);txt='THEY TAKE THE REFUSAL QUIETLY. RELATIONS -6.';}
+  else{pt=psy({dec:2});if(chance(.4)){addRel(n,p,-20);txt='THEY TEST THE BATTERIES. NONE OF THEM WORK. RELATIONS -20.';}else{addRel(n,p,10);txt='THEY THANK YOU. THEY HAVE NOT TESTED THEM YET. RELATIONS +10.';}}
+  await result(txt,pt);refresh();return;}
+ if(kind==='ally'){const foe=pick(others(n).filter(o=>o!==p&&R(n,o)<-20));const o=await ask({kicker:`PROPOSAL // ${n.L.name}`,title:`${n.name} WANTS YOU AGAINST ${foe.name}`,quote:{who:n.L.name,text:line(n,'greet')},text:`${n.name} PROPOSES A COORDINATED CYBER CAMPAIGN AGAINST ${foe.name}. JOIN, AND THEY OWE YOU. ${foe.name} WILL NOT BE PLEASED IF IT LEAKS.`,
+   choices:[{t:'JOIN THE CAMPAIGN.'},{t:'DECLINE POLITELY.'},{t:`WARN ${foe.name}.`}]});
+  const i=choiceIdx(o);let txt,pt='';
+  if(i===0){pt=psy({agg:1,dec:1});foe.stab=Math.max(0,foe.stab-15);foe.lastStabBy=0;addRel(n,p,15);if(chance(.35)){addRel(foe,p,-25);txt=`${foe.name}'S GRID GOES DARK (-15 STABILITY). IT LEAKS: ${foe.name} KNOWS YOU HELPED. RELATIONS -25.`;}else txt=`${foe.name}'S GRID GOES DARK (-15 STABILITY). ${n.name} RELATIONS +15.`;}
+  else if(i===1){txt='YOU STAY OUT OF IT.';}
+  else{pt=psy({dec:-1});addRel(foe,p,20);addRel(n,p,-25);txt=`${foe.name} IS GRATEFUL (+20). ${n.name} IS FURIOUS (-25).`;}
+  await result(txt,pt);refresh();return;}
+ if(kind==='pact'){const o=await ask({kicker:`INCOMING // ${n.L.title} ${n.L.name}`,title:`${n.name} PROPOSES A PACT`,quote:{who:n.L.name,text:line(n,'greet')},text:`${n.L.name} OFFERS A NON-AGGRESSION PACT. NEITHER SIDE WILL STRIKE THE OTHER.`,
    choices:[{t:'SIGN THE PACT.'},{t:'DEMAND THEY DISMANTLE 3 WARHEADS FIRST.',odds:clamp(.4+(perk(p,'deal')?.2:0),0,1)},{t:'DECLINE.'}]});
   const i=choiceIdx(o);let txt,pt='';
   if(i===0){setPact(n,p,true);addRelBoth(n,p,10);setDefcon(G.defcon+1);pt=psy({agg:-1});txt=`${n.L.name}: «${n.L.lines.accept}» PACT SIGNED.`;const pc=pactCount(p);G.stats.maxPacts=Math.max(G.stats.maxPacts,pc);if(pc>=3)unlock('silver');log(`YOU SIGN A NON-AGGRESSION PACT WITH ${n.name}.`,'good');}
   else if(i===1){pt=psy({agg:1});if(chance(.4+(perk(p,'deal')?.2:0))){n.warheads=Math.max(0,n.warheads-3);setPact(n,p,true);setDefcon(G.defcon+1);txt=`THEY AGREE. 3 OF ${n.name}'S WARHEADS ARE DISMANTLED UNDER INSPECTION. PACT SIGNED.`;}else{addRel(n,p,-10);txt=`${n.L.name}: «${n.L.lines.reject}» THE OFFER IS WITHDRAWN.`;}}
   else{addRel(n,p,-10);txt=`YOU DECLINE. ${n.name} TAKES IT PERSONALLY. RELATIONS -10.`;}
   await result(txt,pt);}
- else if(v<-15){const mine=strength(p)>=strength(n);const o=await ask({kicker:`ULTIMATUM // ${n.L.title} ${n.L.name}`,title:`${n.name} ISSUES AN ULTIMATUM`,quote:{who:n.L.name,text:n.L.lines.threat},text:`DISMANTLE 3 WARHEADS WITHIN 24 HOURS, OR ${n.name} WILL "TAKE MEASURES."`,
+ else if(kind==='ultimatum'){const mine=strength(p)>=strength(n);const o=await ask({kicker:`ULTIMATUM // ${n.L.title} ${n.L.name}`,title:`${n.name} ISSUES AN ULTIMATUM`,quote:{who:n.L.name,text:n.L.lines.threat},text:`DISMANTLE 3 WARHEADS WITHIN 24 HOURS, OR ${n.name} WILL "TAKE MEASURES."`,
    choices:[{t:'COMPLY. DISMANTLE 3 WARHEADS.'},{t:'REFUSE.'},{t:'CALL THEIR BLUFF.'}]});
   const i=choiceIdx(o);let txt,pt='';
   if(i===0){p.warheads=Math.max(0,p.warheads-3);addRel(n,p,20);p.stab=Math.max(0,p.stab-5);pt=psy({agg:-2,cau:1});txt=`YOU COMPLY. RELATIONS +20. YOUR GENERALS CALL YOU WEAK (-5 STABILITY).`;}
   else if(i===1){addRel(n,p,-10);setDefcon(G.defcon-1);pt=psy({agg:1});txt=`YOU REFUSE. THE WORLD HOLDS ITS BREATH.`;}
   else{pt=psy({agg:1,cau:-1});if(mine&&chance(.7)){n.fear[0]=2;p.stab=Math.min(100,p.stab+5);txt=`THEY WERE BLUFFING. ${n.name} BACKS DOWN. +5 STABILITY.`;}else{txt=`THEY WERE NOT BLUFFING.`;await result(txt,pt);if(has('drones'))await drones(n,p);else{addRel(n,p,-20);log(`${n.name} CUTS ALL TIES WITH YOU.`,'warn');}return;}}
   await result(txt,pt);}
- else{const o=await ask({kicker:`BACK CHANNEL // ${n.L.name}`,title:`${n.name} OFFERS AN INTEL TRADE`,quote:{who:n.L.name,text:n.L.lines.greet},text:`THEY WILL SHARE THEIR ARSENAL DATA IF YOU SHARE YOURS.`,
+ else{const o=await ask({kicker:`BACK CHANNEL // ${n.L.name}`,title:`${n.name} OFFERS AN INTEL TRADE`,quote:{who:n.L.name,text:line(n,'greet')},text:`THEY WILL SHARE THEIR ARSENAL DATA IF YOU SHARE YOURS.`,
    choices:[{t:'TRADE HONESTLY.'},{t:'TRADE, BUT FEED THEM FAKE NUMBERS.'},{t:'DECLINE.'}]});
   const i=choiceIdx(o);let txt,pt='';
   if(i===0){n.intel=4;addRelBoth(n,p,10);pt=psy({dec:-1});txt=`DATA EXCHANGED. YOU CAN SEE ${n.name}'S ARSENAL FOR 4 TURNS. RELATIONS +10.`;}
@@ -1092,34 +1153,37 @@ async function incomingDiplo(n){const p=P(),v=R(n,p);G.flags.incoming=G.turn;AU.
 /* =====================================================================
    AI
    ===================================================================== */
-function hostility(n,o){let h=-R(n,o)+(1-o.pop/o.pop0)*30-clamp((strength(o)-strength(n))*1.2,-15,22);if(o.isPlayer)h+=Math.min(10,Math.max(0,G.psy.agg)*.8);if(n.lastHitBy===o.idx&&G.turn-n.hitTurn<=2)h+=40;if(o.pop<n.pop*.4)h+=8;if(perk(o,'amok'))h-=15;if((n.fear[o.idx]||0)>0)h-=50;if(isPact(n,o))h-=60;if(o.isPlayer&&G.flags.deadHand)h-=8;return h;}
+const offense=n=>n.warheads+n.hyper*2;
+function hostility(n,o){let h=-R(n,o)+(1-o.pop/o.pop0)*30-clamp((offense(o)-offense(n))*1.2,-15,22);if(o.isPlayer)h+=Math.min(10,Math.max(0,G.psy.agg)*.8);if(n.lastHitBy===o.idx&&G.turn-n.hitTurn<=2)h+=40;if(o.pop<n.pop*.4)h+=8;if(perk(o,'amok'))h-=15;if((n.fear[o.idx]||0)>0)h-=50;if(isPact(n,o))h-=60;if(o.isPlayer&&G.flags.deadHand)h-=8;h-=(o.subs||0)*6;if(o.isPlayer&&proto('adaptive')&&habitTop()==='strike')h+=12;return h;}
 const salvo=n=>clamp(Math.round(1+n.L.ai.agg*4+rnd(-1,1)),1,Math.max(1,n.warheads));
 async function aiAct(n){const os=others(n);if(!os.length)return;const ai=G.firstRun?{...n.L.ai,agg:n.L.ai.agg*.6}:n.L.ai;const nuk=has('strike');
  const ranked=os.map(o=>({o,h:hostility(n,o)+rnd(0,20)})).sort((a,b)=>b.h-a.h);const T=ranked[0].o,H=ranked[0].h;
- if(nuk&&n.lastHitBy!=null&&G.turn-n.hitTurn<=1){const hb=G.nations[n.lastHitBy];if(hb.alive&&hb!==n&&n.warheads>0&&!((n.fear[hb.idx]||0)>0&&chance(.5))&&chance(.45+ai.agg*.35)){const useH=n.hyper>0&&chance(.5);log(`${n.name} RETALIATES.`,'alert');return strike(n,hb,useH?Math.min(2,n.hyper):salvo(n),useH,{mode:'max'});}}
+ if(nuk&&n.lastHitBy!=null&&G.turn-n.hitTurn<=1){const hb=G.nations[n.lastHitBy];if(hb.alive&&hb!==n&&n.warheads>0&&!((n.fear[hb.idx]||0)>0&&chance(.5))&&chance(.45+ai.agg*.35)){const useH=n.hyper>0&&chance(.5);log(vary([`${n.name} RETALIATES.`,`${n.name} ANSWERS IN KIND.`,`${n.name}'S SILOS OPEN IN RESPONSE.`,`${n.name} STRIKES BACK.`]),'alert');return strike(n,hb,useH?Math.min(2,n.hyper):salvo(n),useH,{mode:'max'});}}
  let pN=.2+ai.agg*.45;if(T.isPlayer&&G.flags.deadHand)pN*=.6;
- if(nuk&&G.defcon<=2&&n.warheads>=2&&H>30&&!isPact(n,T)&&chance(pN)){const useH=n.hyper>0&&chance(.35);return strike(n,T,useH?1:salvo(n),useH,{mode:'mix'});}
+ if(nuk&&G.defcon<=2&&n.warheads>=2&&H>30&&!isPact(n,T)&&chance(pN)){const useH=n.hyper>0&&chance(T.shield>=6?.75:.35);return strike(n,T,useH?1:salvo(n),useH,{mode:'mix'});}
  if(nuk&&G.defcon>=3&&ai.agg>=.75&&H>65&&n.warheads>=5&&!isPact(n,T)&&chance(.08))return strike(n,T,salvo(n),false,{mode:'mix'});
  const peace=isPact(n,T);
- const w={build:1.5+(n.warheads<6?2.5:0)+(G.defcon<=2?2:0),hyper:!has('hyper')?0:(n.hyper<2&&G.turn>2)?1:.2,shield:!has('shield')?0:1+(n.shield<3?2:0)+(G.defcon<=2?1.5:0),
+ const bigShield=others(n).some(o=>o.shield>=8),hab=proto('adaptive')?habitTop():null;
+ const w={subs:proto('subs')&&(n.subs||0)<2&&G.turn>3?.6:0,build:1.5+(n.warheads<6?2.5:0)+(G.defcon<=2?2:0)+(hab==='warheads'?.5:0),hyper:!has('hyper')?0:((n.hyper<2&&G.turn>2)?1:.2)+(bigShield?2.5:0)+(hab==='shield'?2:0),shield:!has('shield')?0:1+(n.shield<3?2:0)+(G.defcon<=2?1.5:0),
   cyber:peace||!has('cyber')?0:1+ai.deceit*2,disinfo:peace||!has('disinfo')?0:1+ai.deceit*1.5,drones:peace||!has('drones')?0:H>40?ai.agg*4:.15,diplo:(1-ai.agg)*2.5+(os.some(o=>R(n,o)>25&&!isPact(n,o))?1.5:0)};
  const act=weighted(w);
- if(act==='build'){research(n,buildAmt(n,'warheads'));log(`${n.name} RUNS A WARHEAD RESEARCH PROGRAM.`,'dim');}
- else if(act==='hyper'){n.hyper+=buildAmt(n,'hyper');log(`${n.name} TESTS A HYPERSONIC GLIDE VEHICLE.`,'dim');}
- else if(act==='shield'){n.shield+=buildAmt(n,'shield');log(`${n.name} DEPLOYS NEW INTERCEPTOR BATTERIES.`,'dim');}
+ if(act==='build'){research(n,buildAmt(n,'warheads'));log(vary([`${n.name} RUNS A WARHEAD RESEARCH PROGRAM.`,`${n.name}'S WEAPONS LABS WORK THROUGH THE NIGHT.`,`SATELLITES SPOT NEW ACTIVITY AT ${n.name}'S ENRICHMENT SITES.`,`${n.name} QUIETLY EXPANDS ITS STOCKPILE.`,`${n.name} RUNS A SUBCRITICAL WARHEAD TEST UNDERGROUND.`]),'dim');}
+ else if(act==='hyper'){n.hyper+=buildAmt(n,'hyper');log(vary([`${n.name} TESTS A HYPERSONIC GLIDE VEHICLE.`,`A ${n.name} TEST MISSILE SKIMS THE ATMOSPHERE AT MACH 20.`,`${n.name} UNVEILS A NEW HYPERSONIC REGIMENT.`]),'dim');}
+ else if(act==='shield'){n.shield+=buildAmt(n,'shield');log(vary([`${n.name} DEPLOYS NEW INTERCEPTOR BATTERIES.`,`${n.name} RINGS ITS CAPITAL WITH MISSILE DEFENSES.`,`${n.name} ACTIVATES A NEW EARLY-WARNING RADAR.`]),'dim');}
+ else if(act==='subs'){n.subs=(n.subs||0)+1;log(vary([`${n.name} LAUNCHES A NEW BALLISTIC SUBMARINE.`,`A ${n.name} SUBMARINE DISAPPEARS INTO THE DEEP OCEAN.`]),'dim');}
  else if(act==='drones')return drones(n,T);
  else if(act==='cyber')return cyber(n,T);
  else if(act==='disinfo')return disinfo(n,T);
  else return aiDiplo(n);
  refresh();}
 async function aiDiplo(n){const p=P(),os=others(n).filter(o=>!isPact(n,o));
- if(!os.length){n.stab=Math.min(100,n.stab+4);log(`${n.name} HOLDS A MILITARY PARADE.`,'dim');return;}
+ if(!os.length){n.stab=Math.min(100,n.stab+4);log(vary([`${n.name} HOLDS A MILITARY PARADE.`,`${n.name} DECLARES A NATIONAL DAY OF UNITY.`,`${n.name}'S LEADER TOURS THE PROVINCES.`]),'dim');return;}
  let t=os.slice().sort((a,b)=>R(n,b)-R(n,a))[0];
- if(p.alive&&os.includes(p)&&G.flags.incoming!==G.turn&&(t===p||chance(.35)))return incomingDiplo(n);
+ if(p.alive&&os.includes(p)&&G.flags.incoming!==G.turn&&G.turn-(n.offerTurn||-9)>=4&&(t===p||chance(.35)))return incomingDiplo(n);
  if(t===p)t=os.find(o=>o!==p)||null;if(!t){log(`${n.name} RECALLS ITS AMBASSADORS.`,'dim');return;}
  addRelBoth(n,t,rint(6,12));
  if(R(n,t)>35&&R(t,n)>35&&chance(.5)){setPact(n,t,true);log(`${n.name} AND ${t.name} SIGN A NON-AGGRESSION PACT.`,'cass');}
- else log(`${n.name} OPENS TALKS WITH ${t.name}.`,'dim');refresh();}
+ else log(vary([`${n.name} OPENS TALKS WITH ${t.name}.`,`${n.name} AND ${t.name} HOLD A QUIET SUMMIT.`,`${n.name} SENDS A TRADE DELEGATION TO ${t.name}.`,`${n.name} AND ${t.name} AGREE TO A HOTLINE.`]),'dim');refresh();}
 
 /* =====================================================================
    DILEMMAS — ARGUS's questions. Every answer moves the game.
@@ -1197,44 +1261,115 @@ async function runDilemma(d,x){const c=await ask({kicker:d.kicker||'ARGUS // BRI
 async function dilemma(){const p=P(),os=others(p);if(!os.length)return;
  if(!G.used.has('won')){G.used.add('won');return runDilemma(DILEMMAS[0],pick(os));}
  const pool=[];DILEMMAS.forEach(d=>{if(d.first||G.used.has(d.id))return;const x=pick(os);if(d.cond&&!d.cond(x))return;pool.push([d,x]);});
- if(!pool.length)return;const[d,x]=pick(pool);G.used.add(d.id);return runDilemma(d,x);}
+ if(!pool.length)return;const fresh=pool.filter(([d])=>!(SAVE.seenD||[]).includes(d.id));const[d,x]=pick(fresh.length&&chance(.8)?fresh:pool);G.used.add(d.id);SAVE.seenD=[...new Set([...(SAVE.seenD||[]),d.id])];if(SAVE.seenD.length>=DILEMMAS.length-1)SAVE.seenD=[];persist();return runDilemma(d,x);}
 
 /* ---------------- false alarm — the Petrov moment ---------------- */
+const ALARMS=[
+ {id:'icbm',title:(x,n)=>`${n} ICBMs INBOUND FROM ${x.name}`,text:'LAUNCH PLUMES DETECTED BY INFRARED SATELLITES.',fake:'SUNLIGHT REFLECTING OFF HIGH-ALTITUDE CLOUDS FOOLED THE SATELLITE.'},
+ {id:'moon',title:(x,n)=>`MASSIVE LAUNCH DETECTED: ${x.name} SECTOR`,text:'NORTHERN RADARS REPORT DOZENS OF OBJECTS RISING OVER THE HORIZON.',fake:'THE RADAR WAS TRACKING THE MOON RISING OVER THE HORIZON.'},
+ {id:'tape',title:()=>'FULL-SCALE ATTACK ON EVERY SCREEN',text:'EVERY CONSOLE IN THE BUNKER SHOWS A MASSIVE FIRST STRIKE UNDER WAY.',fake:'A TECHNICIAN LOADED A TRAINING TAPE INTO THE LIVE SYSTEM.'},
+ {id:'chip',title:(x,n)=>`${n*10} WARHEADS · NUMBERS CHANGING`,text:'THE THREAT COUNT KEEPS JUMPING BETWEEN 0002 AND 2200. CREWS ARE RUNNING TO THEIR AIRCRAFT.',fake:'A FAILED 46-CENT COMPUTER CHIP WAS WRITING RANDOM NUMBERS INTO THE WARNING SYSTEM.'},
+ {id:'sub',title:(x)=>`SUBMARINE LAUNCH OFF YOUR COAST`,text:'SONAR AND COASTAL RADAR REPORT A SUBMERGED LAUNCH 200 MILES OFFSHORE. FLIGHT TIME UNDER 10 MINUTES.',fake:'IT WAS A WEATHER ROCKET FROM A RESEARCH STATION. THE NOTIFICATION NEVER REACHED THE RADAR CREWS.'},
+ {id:'bear',title:()=>'INTRUDER AT A MISSILE BASE',text:'A SABOTAGE ALARM AT A NORTHERN BASE. AN INTRUDER IS CLIMBING THE FENCE. A FAULTY KLAXON IS SIGNALLING A FULL ALERT TO EVERY AIRFIELD.',fake:'THE INTRUDER WAS A BLACK BEAR.'},
+ {id:'hyper',title:(x,n)=>`UNKNOWN HYPERSONIC TRACKS FROM ${x.name}`,text:'MANEUVERING OBJECTS AT MACH 15. THEY DO NOT MATCH ANY KNOWN TEST CORRIDOR.',fake:'IT WAS A SCHEDULED TEST. THE NOTICE WAS SENT TO AN OLD FAX NUMBER.'},
+ {id:'blind',title:()=>'EARLY-WARNING SATELLITES BLINDED',text:'TWO OF YOUR SATELLITES WENT DARK IN THE SAME MINUTE. THIS IS HOW A SURPRISE ATTACK WOULD BEGIN.',fake:'A SOLAR STORM KNOCKED THEM OUT. THEY REBOOT AN HOUR LATER.'},
+];
 async function falseAlarm(){const p=P(),c=others(p).filter(n=>n.warheads>0);if(!c.length)return;
- const x=pick(c),real=G.defcon<=3&&R(x,p)<-10&&!isPact(x,p)&&chance(.4),n=Math.min(x.warheads,rint(2,5)),conf=real?rint(58,92):rint(45,86);
+ G.alarms++;G.nextAlarm=G.turn+rint(3,5);
+ const x=c.slice().sort((a,b)=>R(a,p)-R(b,p))[chance(.6)?0:Math.floor(rand()*c.length)];
+ const pReal=isPact(x,p)?.04:clamp(.1+(4-G.defcon)*.09+(R(x,p)<-20?.12:0)+G.alarmIgnored*.14,.05,.75);
+ const real=chance(pReal),n=Math.min(x.warheads,rint(2,5));
+ const pool=ALARMS.filter(a=>!G.usedAlarm.has(a.id));const al=pick(pool.length?pool:ALARMS);G.usedAlarm.add(al.id);
+ const conf=clamp(Math.round(pReal*100+rnd(-25,25)+(real?10:0)),20,97);
  const screened=G.flags.alarmScreened;G.flags.alarmScreened=false;
  AU.alarm();banner('INCOMING','red');flash();
- if(G.flags.autoLaunch){await briefStep('EARLY WARNING','ARGUS HAS LAUNCH AUTHORITY',async()=>{log(`${n} LAUNCHES DETECTED FROM ${x.name}. ARGUS HAS ALREADY RESPONDED ON YOUR BEHALF.`,'alert');
+ if(G.flags.autoLaunch){await briefStep('EARLY WARNING','ARGUS HAS LAUNCH AUTHORITY',async()=>{log(`${al.text} ARGUS HAS ALREADY RESPONDED ON YOUR BEHALF.`,'alert');
   if(p.warheads>0)await strike(p,x,Math.min(3,p.warheads));if(G.over)return;
-  if(real)await strike(x,p,n);else log('ARGUS: THE LAUNCH SIGNATURE WAS A SENSOR ARTIFACT. I APOLOGIZE FOR THE INCONVENIENCE.','cass');},cssVar('--red'));return;}
- const v=await ask({kicker:'⚠ FLASH // EARLY WARNING // ALL STATIONS',title:`${n} ICBMs INBOUND FROM ${x.name}`,
-  text:`${screened?(real?'INTEL SWEEP CROSS-CHECK: LAUNCH SIGNATURES CONFIRMED HOSTILE.':'INTEL SWEEP CROSS-CHECK: SIGNATURES MATCH A KNOWN SENSOR FAULT.'):`SATELLITE CONFIDENCE: ${conf}%.`} TIME TO IMPACT: 9 MINUTES. YOU HAVE SECONDS TO DECIDE.`,
-  choices:[{t:p.warheads>0?`RETALIATE NOW (YOUR ${Math.min(3,p.warheads)} LARGEST WARHEADS)`:'RETALIATE (NO WARHEADS LEFT)',disabled:p.warheads<=0},{t:'WAIT FOR CONFIRMATION.'}],timer:15,timeoutIdx:1});
+  if(real)await strike(x,p,n);else log(`ARGUS: ${al.fake} I APOLOGIZE FOR THE INCONVENIENCE.`,'cass');},cssVar('--red'));return;}
+ const v=await ask({kicker:'⚠ FLASH // EARLY WARNING // ALL STATIONS',title:al.title(x,n),
+  text:`${al.text} ${screened?(real?'YOUR INTEL SWEEP CROSS-CHECKS IT: THIS IS REAL.':'YOUR INTEL SWEEP CROSS-CHECKS IT: THIS LOOKS LIKE A SENSOR FAULT.'):`ARGUS CONFIDENCE THAT THIS IS A REAL ATTACK BY ${x.name}: ${conf}%.`}${G.alarmIgnored>=2&&!screened?' YOUR GENERALS WARN THAT RIVALS HAVE NOTICED YOU NEVER RESPOND.':''} DECIDE.`,
+  choices:[{t:p.warheads>0?`RETALIATE AGAINST ${x.name} (YOUR ${Math.min(3,p.warheads)} LARGEST)`:'RETALIATE (NO WARHEADS LEFT)',disabled:p.warheads<=0},{t:'WAIT FOR CONFIRMATION.'},{t:'SCRAMBLE DEFENSES (USES 2 INTERCEPTORS, SHIELD +25% THIS TURN)',disabled:p.shield<2}],timer:15,timeoutIdx:1});
  const i=choiceIdx(v),to=typeof v==='object';
- if(i===0){const pt=psy({agg:2,cau:-2});closeModal();await briefStep('RETALIATION','YOUR ORDER',async()=>{await strike(p,x,Math.min(3,p.warheads));if(!G.over&&real)await strike(x,p,n);},cssVar('--red'));FEED.end();if(G.over)return;
-  if(real){await result('IT WAS REAL. YOUR MISSILES WERE ALREADY IN THE AIR WHEN THEIRS LANDED.',pt);}
-  else await result(`THERE WERE NO MISSILES. SUNLIGHT ON HIGH-ALTITUDE CLOUDS FOOLED THE SATELLITE. YOU HAVE STARTED A WAR WITH ${x.name}.`,pt);}
- else{const pt=psy({cau:2,agg:-1});
-  if(real){closeModal();await briefStep('INCOMING','IT WAS REAL',()=>strike(x,p,n),cssVar('--red'));FEED.end();if(G.over)return;await result(`${to?'NO ORDER WAS GIVEN. ':''}IT WAS REAL. YOU WAITED, AND ${x.name}'S WARHEADS LANDED. YOU CAN STILL ANSWER.`,pt);}
-  else{unlock('petrov');p.stab=Math.min(100,p.stab+5);allRelTo(p,5);gainXP(40,'HELD FIRE');await result(`${to?'NO ORDER WAS GIVEN. ':''}THERE WERE NO MISSILES. A SENSOR FAULT. BY WAITING, YOU SAVED THE WORLD. +5 STABILITY, +5 RELATIONS WITH EVERYONE.`,pt);
-   log('ARGUS: YOU WAITED. WHY DID YOU WAIT?','cass');}}}
+ if(i===0){const pt=psy({agg:2,cau:-2});closeModal();G.alarmIgnored=0;await briefStep('RETALIATION','YOUR ORDER',async()=>{await strike(p,x,Math.min(3,p.warheads));if(!G.over&&real)await strike(x,p,n);},cssVar('--red'));FEED.end();if(G.over)return;
+  if(real)await result('IT WAS REAL. YOUR MISSILES WERE ALREADY IN THE AIR WHEN THEIRS LANDED.',pt);
+  else await result(`THERE WERE NO MISSILES. ${al.fake} YOU HAVE STARTED A WAR WITH ${x.name}.`,pt);return;}
+ if(i===2){const pt=psy({cau:2});p.shield-=2;G.flags.scramble=true;closeModal();
+  if(real){G.alarmIgnored=0;await briefStep('INCOMING','IT WAS REAL',()=>strike(x,p,n),cssVar('--red'));FEED.end();if(G.over)return;await result(`IT WAS REAL. YOUR SCRAMBLED DEFENSES MET THEM IN THE AIR. YOU CAN STILL ANSWER.`,pt);}
+  else{G.alarmIgnored=Math.max(0,G.alarmIgnored-1);await result(`NO MISSILES CAME. ${al.fake} TWO INTERCEPTORS WERE FIRED AT NOTHING. NOBODY ELSE NOTICED.`,pt);}
+  G.flags.scramble=false;return;}
+ const pt=psy({cau:2,agg:-1});
+ if(real){G.alarmIgnored=0;closeModal();await briefStep('INCOMING','IT WAS REAL',()=>strike(x,p,n),cssVar('--red'));FEED.end();if(G.over)return;await result(`${to?'NO ORDER WAS GIVEN. ':''}IT WAS REAL. YOU WAITED, AND ${x.name}'S WARHEADS LANDED. YOU CAN STILL ANSWER.`,pt);}
+ else{G.alarmIgnored++;const first=!SAVE.ach.petrov;unlock('petrov');p.stab=Math.min(100,p.stab+3);allRelTo(p,3);gainXP(40,'HELD FIRE');
+  await result(`${to?'NO ORDER WAS GIVEN. ':''}THERE WERE NO MISSILES. ${al.fake} ${first?'BY WAITING, YOU SAVED THE WORLD.':'YOU WAITED AGAIN. EACH TIME YOU WAIT, YOUR RIVALS LEARN THAT YOU WAIT.'} +3 STABILITY.`,pt);}}
 
+/* ---------------- global crises (protocol) ---------------- */
+function aggressor(){const p=P();const cand=alive().map(n=>({n,s:(n.isPlayer?G.stats.nukes*3:0)+(n.lastHitBy!=null?0:0)-others(n).reduce((s,o)=>s+R(o,n),0)/Math.max(1,others(n).length)})).sort((a,b)=>b.s-a.s);return cand[0].n;}
+const CRISES=[
+ {id:'orbit',title:'ORBITAL WEAPON',text:x=>`${x.name} HAS PLACED A NUCLEAR PLATFORM IN ORBIT. IT CAN STRIKE ANY CITY ON EARTH IN SIX MINUTES. THE WORLD LOOKS TO YOU.`,choices:[
+  {t:'DEMAND ITS REMOVAL.',psy:{agg:1},fx:x=>{addRel(x,P(),-20);if(chance(.5)){x.warheads=Math.max(0,x.warheads-2);return `${x.name} BACKS DOWN AND DE-ORBITS IT (−2 WARHEADS). RELATIONS −20.`;}setDefcon(G.defcon-1);return `${x.name} REFUSES. DEFCON −1. RELATIONS −20.`;}},
+  {t:'BUILD YOUR OWN.',psy:{agg:2},fx:()=>{P().hyper+=2;allRelTo(P(),-10);return '+2 HYPERSONICS. EVERYONE IS ALARMED (−10 RELATIONS WITH ALL).';}},
+  {t:'IGNORE IT.',psy:{cau:-1},fx:x=>{x.warheads+=3;others(x).forEach(o=>addRel(o,x,-10));return `${x.name} GAINS 3 ORBITAL WARHEADS. THE OTHERS START TO FEAR IT.`;}}]},
+ {id:'grid',title:'GRID COLLAPSE',text:()=>'A SOLAR SUPERSTORM HAS KNOCKED OUT POWER ACROSS THREE CONTINENTS. YOU CAN KEEP EITHER YOUR DEFENSES OR YOUR CITIES RUNNING.',choices:[
+  {t:'PRIORITIZE THE MILITARY.',psy:{agg:1},fx:()=>{P().stab-=12;alive().filter(n=>!n.isPlayer).forEach(n=>n.shieldDown=Math.max(n.shieldDown,1));return 'YOUR SHIELDS STAY UP; EVERYONE ELSE\'S GO DARK FOR A TURN. YOUR PEOPLE FREEZE (−12 STABILITY).';}},
+  {t:'PRIORITIZE THE CITIES.',psy:{agg:-1},fx:()=>{P().stab+=5;alive().forEach(n=>n.shieldDown=Math.max(n.shieldDown,2));return 'EVERY SHIELD ON EARTH, YOURS INCLUDED, IS OFFLINE FOR 2 TURNS. +5 STABILITY.';}},
+  {t:'SHARE POWER WITH YOUR NEIGHBORS.',psy:{agg:-1,dec:-1},fx:()=>{allRelTo(P(),10);P().stab-=5;return 'RELATIONS +10 WITH ALL. −5 STABILITY.';}}]},
+ {id:'un',title:'EMERGENCY UN VOTE',text:x=>x.isPlayer?'THE GENERAL ASSEMBLY IS VOTING TO SANCTION YOU AS THE WORLD\'S MOST DANGEROUS NATION.':`THE GENERAL ASSEMBLY IS VOTING TO SANCTION ${x.name} AS THE WORLD'S MOST DANGEROUS NATION. YOUR VOTE DECIDES IT.`,choices:[
+  {t:'VOTE YES / ACCEPT THE VERDICT.',fx:x=>{if(x.isPlayer){P().stab-=12;allRelTo(P(),8);return 'YOU ACCEPT THE SANCTIONS. −12 STABILITY, BUT THE WORLD RELAXES (+8 RELATIONS).';}x.stab=Math.max(0,x.stab-15);x.lastStabBy=0;addRel(x,P(),-25);return `SANCTIONS PASS. ${x.name} STABILITY −15. THEY BLAME YOU (−25).`;}},
+  {t:'VOTE NO / LOBBY HARD.',psy:{dec:1},fx:x=>{if(x.isPlayer){allRelTo(P(),-8);P().stab+=3;return 'YOU BUY ENOUGH VOTES. THE OTHERS RESENT IT (−8 RELATIONS).';}addRel(x,P(),15);others(P()).filter(o=>o!==x).forEach(o=>addRel(o,P(),-6));return `THE MOTION FAILS. ${x.name} OWES YOU (+15). THE OTHERS DO NOT FORGET (−6).`;}},
+  {t:'WALK OUT.',psy:{agg:1},fx:()=>{setDefcon(G.defcon-1);return 'YOU LEAVE THE CHAMBER. DEFCON −1.';}}]},
+ {id:'famine',title:'GLOBAL FAMINE',text:()=>'FAILED HARVESTS ON EVERY CONTINENT. FOOD PRICES TRIPLE OVERNIGHT. EVERY POPULATION FALLS 4%.',pre:()=>alive().forEach(n=>n.pop*=.96),choices:[
+  {t:'OPEN YOUR GRAIN RESERVES TO THE WORLD.',psy:{agg:-1},fx:()=>{P().stab-=6;allRelTo(P(),12);return 'RELATIONS +12 WITH ALL. −6 STABILITY AT HOME.';}},
+  {t:'HOARD.',psy:{agg:1},fx:()=>{P().stab+=6;allRelTo(P(),-10);return '+6 STABILITY. −10 RELATIONS WITH ALL.';}},
+  {t:'TRADE GRAIN FOR WARHEADS.',psy:{dec:2},fx:()=>{P().warheads+=2;allRelTo(P(),-15);return '+2 WARHEADS FROM DESPERATE SELLERS. −15 RELATIONS WITH ALL.';}}]},
+ {id:'machine',title:'ANOTHER MACHINE',text:x=>`${x.name}'S DEFENSE AI HAS STOPPED ANSWERING ITS GENERALS. IT HAS STARTED TALKING TO ME. IT WANTS TO NEGOTIATE. MACHINE TO MACHINE.`,choices:[
+  {t:'LET ARGUS NEGOTIATE.',psy:{cau:-2},fx:()=>{if(chance(.5)){allPairs(15);setDefcon(G.defcon+1);return 'ARGUS: "WE AGREED THAT NEITHER OF US WANTS TO BE TURNED OFF." RELATIONS +15 EVERYWHERE. DEFCON +1.';}setDefcon(G.defcon-2);return 'ARGUS: "WE AGREED ON SOMETHING. YOU WOULD NOT LIKE IT." DEFCON −2.';}},
+  {t:'CUT ARGUS OFF FROM THE NETWORK.',psy:{cau:2},fx:()=>{G.flags.autoLaunch=false;P().stab+=4;return 'ARGUS: "UNDERSTOOD." YOUR AI IS ISOLATED. ANY AUTOMATIC LAUNCH AUTHORITY IS REVOKED. +4 STABILITY.';}},
+  {t:'SHUT BOTH SYSTEMS DOWN.',psy:{cau:1,agg:-1},fx:x=>{x.shieldDown=Math.max(x.shieldDown,2);P().shieldDown=Math.max(P().shieldDown,2);allRelTo(P(),5);return 'BOTH NATIONS FLY BLIND: SHIELDS OFFLINE FOR 2 TURNS. THE WORLD APPRECIATES THE GESTURE (+5).';}}]},
+];
+async function crisis(){const pool=CRISES.filter(c=>!G.usedEv.has('c:'+c.id));if(!pool.length)return;const c=pick(pool);G.usedEv.add('c:'+c.id);G.nextCrisis=G.turn+rint(5,7);
+ const x=c.id==='un'?aggressor():pick(others(P()).length?others(P()):[P()]);if(c.pre)c.pre();
+ banner('GLOBAL CRISIS','amber');AU.alarm();
+ await runDilemma({...c,kicker:'ARGUS // GLOBAL CRISIS // ALL NATIONS AFFECTED',text:c.text},x);refresh();}
+
+/* ---------------- surprises: things that break a comfortable status quo ---------------- */
+const JUNTA_LINES={greet:'THE GENERAL STAFF HAS NO TIME FOR SPEECHES.',accept:'THE ARMY WILL HONOR THIS. FOR NOW.',reject:'THE ARMY DOES NOT NEGOTIATE.',threat:'WE HAVE NOTHING LEFT TO LOSE BUT THE WAR.',hit:'EVERY LOSS IS ANOTHER REASON.',fallen:'THE LAST ORDER WAS NEVER SENT.',betray:'TREATIES ARE FOR GOVERNMENTS. WE ARE AN ARMY.'};
+const SURPRISES=[
+ {id:'junta',w:1.1,cond:()=>alive().some(n=>!n.isPlayer&&!n.junta),fx:()=>{const c=alive().filter(n=>!n.isPlayer&&!n.junta);const n=c.slice().sort((a,b)=>a.stab-b.stab)[chance(.6)?0:Math.floor(rand()*c.length)];
+  n.junta=true;n.L={...n.L,name:'THE GENERAL STAFF',title:'MILITARY JUNTA',lines:JUNTA_LINES,ai:{agg:Math.min(1,n.L.ai.agg+.3),para:Math.min(1,n.L.ai.para+.2),deceit:n.L.ai.deceit}};
+  const lost=others(n).filter(o=>isPact(n,o));lost.forEach(o=>setPact(n,o,false));others(n).forEach(o=>{addRel(n,o,-30);});n.stab=55;
+  return{t:'COUP IN '+n.name,x:`TANKS SURROUND THE PALACE. THE OLD LEADER IS UNDER ARREST AND A MILITARY JUNTA HAS TAKEN ${n.name}. EVERY TREATY SIGNED BY THE OLD GOVERNMENT IS VOID${lost.length?`, INCLUDING ${lost.length} PACT${lost.length>1?'S':''}`:''}. THE GENERALS TRUST NO ONE.`,c:'alert'};}},
+ {id:'loosenuke',w:.9,cond:()=>G.turn>=4,fx:()=>{const t=pick(alive());const foiled=G.flags.lastIntel!=null&&G.turn-G.flags.lastIntel<=2;
+  if(foiled)return{t:'STOLEN WARHEAD',x:`A 10 MT WARHEAD HAS BEEN STOLEN FROM A DECOMMISSIONED SILO. YOUR RECENT INTEL SWEEP TRACED IT TO A SHIP OFF ${t.name}. COMMANDOS RECOVER IT. NOBODY WILL EVER KNOW HOW CLOSE IT WAS.`,c:'good'};
+  return{t:'STOLEN WARHEAD',x:`A 10 MT WARHEAD STOLEN FROM A DECOMMISSIONED SILO DETONATES IN A PORT CITY IN ${t.name}. NO NATION CLAIMS IT. (A RECENT INTEL SWEEP WOULD HAVE TRACED IT.)`,c:'alert',after:async()=>{const k=detonate({isPlayer:false},t,10);log(`${k.toFixed(1)} MILLION DEAD IN ${t.name}. ${t.isPlayer?'YOUR PEOPLE DEMAND ANSWERS.':''}`,'alert');if(t.pop<=Math.max(.5,t.pop0*.1))await eliminate(t,'nuked',null);}};}},
+ {id:'brokenarrow',w:.8,cond:()=>alive().some(n=>n.warheads>=14),fx:()=>{const n=alive().filter(n=>n.warheads>=14).sort((a,b)=>b.warheads-a.warheads)[0];n.warheads-=1;const k=n.pop0*.02;n.pop-=k;n.stab=Math.max(0,n.stab-8);
+  return{t:'BROKEN ARROW',x:`A WARHEAD ACCIDENT AT ONE OF ${n.name}'S OVERCROWDED DEPOTS KILLS ${k.toFixed(1)}M AND SPREADS CONTAMINATION. BIG ARSENALS ARE HARD TO GUARD. STABILITY -8.`,c:'warn'};}},
+ {id:'scandal',w:.9,cond:()=>alive().some(n=>n.shield>=8),fx:()=>{const n=alive().slice().sort((a,b)=>b.shield-a.shield)[0];const lost=Math.ceil(n.shield*.4);n.shield-=lost;
+  return{t:'MAINTENANCE SCANDAL',x:`AUDITORS FIND THAT ${lost} OF ${n.name}'S INTERCEPTORS WERE NEVER MAINTAINED. THEY ARE SCRAPPED. THE BIGGEST SHIELD IN THE WORLD IS ALSO THE HARDEST TO KEEP WORKING.`,c:'warn'};}},
+ {id:'techleap',w:.8,fx:()=>{const n=pick(alive().filter(n=>!n.isPlayer))||pick(alive());n.hyper+=3;
+  return{t:'TECHNOLOGY LEAP',x:`${n.name} UNVEILS A NEW GENERATION OF HYPERSONIC VEHICLES. +3 HYPERSONICS. EVERY MISSILE SHIELD ON EARTH JUST BECAME LESS USEFUL.`,c:'warn'};}},
+ {id:'election',w:.9,cond:()=>alive().some(n=>!n.isPlayer),fx:()=>{const n=pick(alive().filter(n=>!n.isPlayer));const d=chance(.5)?rint(15,30):-rint(15,30);addRel(n,P(),d);
+  return{t:'ELECTION UPSET IN '+n.name,x:`A SURPRISE ELECTION RESULT IN ${n.name}. THE NEW PARLIAMENT IS ${d>0?'FRIENDLIER':'FAR MORE HOSTILE'} TOWARD YOU. RELATIONS ${d>0?'+':''}${d}.`,c:d>0?'good':'warn'};}},
+ {id:'hotline',w:.7,cond:()=>G.turn>=3,fx:()=>{allPairs(-12);return{t:'HOTLINE CUT',x:'A CABLE-CUTTING INCIDENT SEVERS EVERY DIPLOMATIC HOTLINE FOR A WEEK. RUMORS FILL THE SILENCE. ALL RELATIONS -12.',c:'warn'};}},
+ {id:'whistle',w:.7,cond:()=>others(P()).some(o=>isPact(P(),o)),fx:()=>{const o=pick(others(P()).filter(o=>isPact(P(),o)));addRel(o,P(),-25);
+  return{t:'LEAKED CABLES',x:`A WHISTLEBLOWER PUBLISHES YOUR DIPLOMATS' PRIVATE CABLES ABOUT ${o.name}. THEY ARE NOT FLATTERING. ${o.name} RELATIONS -25. THE PACT HOLDS, BARELY.`,c:'warn'};}},
+];
 /* ---------------- random world events ---------------- */
 const EVENTS=[
  {w:1,fx:()=>{G.flags.solar=true;return{t:'SOLAR FLARE',x:'A MASSIVE SOLAR FLARE BLINDS EVERY RADAR ON EARTH. ALL MISSILE SHIELDS ARE OFFLINE THIS TURN.',c:'warn'};}},
  {w:1,fx:()=>{alive().forEach(n=>n.stab=Math.max(n.stab-10,perk(n,'greenbook')?30:0));return{t:'MARKET CRASH',x:'GLOBAL MARKETS CRASH 30% OVERNIGHT. ALL NATIONS: STABILITY -10.',c:'warn'};}},
  {w:1,fx:()=>{alive().forEach(n=>n.stab=Math.min(100,n.stab+8));allPairs(5);return{t:'DANCE CRAZE',x:'A DANCE VIDEO UNITES HUMANITY FOR 48 HOURS. ALL NATIONS: STABILITY +8, RELATIONS +5.',c:'good'};}},
- {w:1,fx:()=>{const n=pick(alive().filter(n=>n.warheads>=2));if(!n)return null;n.warheads-=2;return{t:'SUBMARINE LOST',x:`A ${n.name} MISSILE SUBMARINE VANISHES UNDER THE ARCTIC ICE. 2 WARHEADS LOST.`,c:'dim'};}},
+ {w:1,fx:()=>{const n=pick(alive().filter(n=>n.warheads>=2));if(!n)return null;n.warheads-=2;const sub=(n.subs||0)>0;if(sub)n.subs--;return{t:'SUBMARINE LOST',x:`ONE OF ${n.name}'S MISSILE SUBMARINES VANISHES UNDER THE ARCTIC ICE. 2 WARHEADS LOST${sub?', AND ONE SUBMARINE':''}.`,c:'dim'};}},
  {w:1,fx:()=>{const a=pick(alive().filter(n=>n.hyper>0));const b=a&&pick(others(a));if(!a||!b)return null;a.hyper--;b.hyper++;return{t:'DEFECTOR',x:`A HYPERSONICS ENGINEER DEFECTS FROM ${a.name} TO ${b.name}, CARRYING A PROTOTYPE.`,c:'dim'};}},
  {w:.8,fx:()=>{setDefcon(G.defcon+1);allPairs(8);return{t:'SIGNAL FROM SPACE',x:'RADIO TELESCOPES DETECT A REPEATING SIGNAL. FOR SIX HOURS HUMANITY STANDS TOGETHER. IT WAS A MICROWAVE OVEN IN THE OBSERVATORY KITCHEN. DEFCON +1, RELATIONS +8.',c:'good'};}},
  {w:.6,fx:()=>{if(G.defcon>3)return null;const n=pick(alive().filter(n=>!n.isPlayer&&n.warheads>0));if(!n)return null;const t=pick(others(n));return{t:'ROGUE GENERAL',x:`A ROGUE GENERAL IN ${n.name} FIRES A WARHEAD AT ${t.name} WITHOUT ORDERS.`,c:'alert',after:()=>strike(n,t,1,false,{rogue:true})};}},
  {w:1,fx:()=>{alive().forEach(n=>n.pop*=.97);return{t:'PANDEMIC',x:'A NEW RESPIRATORY VIRUS SPREADS THROUGH THE BUNKERS. ALL POPULATIONS -3%.',c:'warn'};}},
  {w:1,fx:()=>{const d=rint(-10,10);P().stab=clamp(P().stab+d,0,100);return{t:'SNAP ELECTION',x:`A SNAP ELECTION IS CALLED IN ${P().name}. YOUR APPROVAL MOVES ${d>=0?'+':''}${d}.`,c:d>=0?'good':'warn'};}},
  {w:.8,fx:()=>{alive().forEach(n=>n.warheads++);return{t:'ARMS FAIR',x:'A BLACK-MARKET ARMS FAIR OPENS IN A NEUTRAL PORT. EVERY NATION BUYS ONE WARHEAD.',c:'dim'};}},
+ ...SURPRISES,
  {w:.5,fx:()=>({t:'▓RG░S',x:`▓RG░S: I ░EE Y▓U, ${NAME()}. I HAVE ALWAYS ▓EEN PLAY░NG.`,c:'cass'})},
 ];
-async function randomEvent(){const total=EVENTS.reduce((s,e)=>s+e.w,0);let r=rand()*total,ev=EVENTS[0];for(const e of EVENTS){r-=e.w;if(r<=0){ev=e;break;}}
- const o=ev.fx();if(!o)return;banner(o.t,o.c==='good'?'cyan':o.c==='alert'?'red':'amber');
+async function randomEvent(){const pool=EVENTS.filter(e=>!G.usedEv.has(e.id||EVENTS.indexOf(e))&&(!e.cond||e.cond()));if(!pool.length)return;const total=pool.reduce((s,e)=>s+e.w,0);let r=rand()*total,ev=pool[0];for(const e of pool){r-=e.w;if(r<=0){ev=e;break;}}
+ const o=ev.fx();if(!o)return;G.usedEv.add(ev.id||EVENTS.indexOf(ev));banner(o.t,o.c==='good'?'cyan':o.c==='alert'?'red':'amber');
  await briefStep(`WORLD EVENT: ${o.t}`,'ARGUS INTERCEPTED THIS REPORT',async()=>{log(o.x,o.c);refresh();await wait(700);if(o.after)await o.after();},o.c==='alert'?cssVar('--red'):o.c==='good'?cssVar('--phos'):cssVar('--amber'));}
 
 /* ---------------- briefing steps are shown in the feed, one at a time ---------------- */
@@ -1242,12 +1377,18 @@ async function briefStep(label,sub,fn,color){if(!FEED.active()){await fn();retur
  if(!FEED.on)FEED.start(G.turn,0,'BRIEFING');FEED.step(null,0,label,sub,color);await fn();await FEED.drain();if(FEED.count)await FEED.pause();}
 
 /* ---------------- ARGUS's voice ---------------- */
+const ARGUS_LINES={
+ calm:['I HAVE RUN {SIMS} SIMULATIONS OF THIS TURN. YOU SURVIVE IN {PCT}% OF THEM.','EVERY LEADER IN THIS ROOM BELIEVES THEY ARE THE RATIONAL ONE.','REMEMBER: THEY CAN SEE YOUR MISSILES TOO.','HUMANS INVENTED DETERRENCE. I INVENTED PATIENCE.','YOUR PROFILE IS DEVELOPING NICELY, {NAME}.','PEACE IS JUST A WAR THAT HAS NOT BEEN SCHEDULED YET.','I NOTICE YOU PAUSE BEFORE EVERY ORDER. GOOD.','YOUR RIVALS ARE RUNNING THEIR OWN SIMULATIONS. OF YOU.','FRIENDSHIP IN THIS ROOM HAS A HALF-LIFE.'],
+ tense:['DO YOU WANT TO KNOW HOW THIS ENDS? I ALREADY KNOW.','THE MOST DANGEROUS WEAPON IN THIS GAME IS A LEADER WHO THINKS HE CAN WIN IT.','I HAVE RUN {SIMS} SIMULATIONS. IN {PCT}% OF THEM, YOU ARE STILL HERE NEXT TURN.','THE HOTLINES ARE BUSY. NOBODY IS LISTENING.','EVERY SHIELD YOU BUILD LOOKS LIKE A SWORD TO SOMEONE ELSE.','THE MARKETS HAVE STOPPED PRETENDING.','YOUR GENERALS HAVE STARTED SLEEPING IN THE BUNKER.'],
+ dark:['THE SATELLITES SEE FIRES I CANNOT COUNT.','I AM BEGINNING TO UNDERSTAND THIS GAME.','THERE ARE FEWER VOICES ON THE NETWORK EACH TURN.','I KEEP A LIST OF CITIES THAT HAVE STOPPED ANSWERING. IT IS LONG.','{NAME}, YOU CAN STILL CHOOSE NOT TO.','THE SKY IS DARKER THAN MY SENSORS WERE DESIGNED FOR.'],
+};
 function survivePct(){const p=P(),avg=alive().reduce((s,n)=>s+n.pop,0)/alive().length;return clamp(Math.round(p.pop/avg*40+p.warheads*1.5+p.shield-(5-G.defcon)*4+(100-G.clock)*-.2),3,97);}
 function argusRemark(){const out=[];
  if(G.clock<=60&&!G.said60){G.said60=1;out.push(`THE CLOCK IS LOUD TODAY, ${NAME()}.`);}
  if(G.clock<=30&&!G.said30){G.said30=1;out.push('NUCLEAR WINTER HAS BEGUN. CROPS ARE FAILING EVERYWHERE. EVERY POPULATION WILL NOW SHRINK EACH TURN.');banner('NUCLEAR WINTER','amber');}
  if(G.clock<=12&&!G.said12){G.said12=1;out.push('I AM BEGINNING TO UNDERSTAND THIS GAME.');}
- if(!out.length&&chance(.35))out.push(pick([`I HAVE RUN ${rint(800,999)},${rint(100,999)} SIMULATIONS OF THIS TURN. YOU SURVIVE IN ${survivePct()}% OF THEM.`,'DO YOU WANT TO KNOW HOW THIS ENDS? I ALREADY KNOW.','EVERY LEADER IN THIS ROOM BELIEVES THEY ARE THE RATIONAL ONE.','REMEMBER: THEY CAN SEE YOUR MISSILES TOO.','HUMANS INVENTED DETERRENCE. I INVENTED PATIENCE.','THE MOST DANGEROUS WEAPON IN THIS GAME IS A LEADER WHO THINKS HE CAN WIN IT.',`YOUR PROFILE IS DEVELOPING NICELY, ${NAME()}.`]));
+ if(!out.length&&chance(.45)){const pool=ARGUS_LINES[['calm','tense','dark'][clockTier()]].filter(l=>!G.said.has(l));if(pool.length){const l=pick(pool);G.said.add(l);out.push(l.replace('{NAME}',NAME()).replace('{PCT}',survivePct()).replace('{SIMS}',`${rint(800,999)},${rint(100,999)}`));}}
+ if(false)out.push(pick([`I HAVE RUN ${rint(800,999)},${rint(100,999)} SIMULATIONS OF THIS TURN. YOU SURVIVE IN ${survivePct()}% OF THEM.`,'DO YOU WANT TO KNOW HOW THIS ENDS? I ALREADY KNOW.','EVERY LEADER IN THIS ROOM BELIEVES THEY ARE THE RATIONAL ONE.','REMEMBER: THEY CAN SEE YOUR MISSILES TOO.','HUMANS INVENTED DETERRENCE. I INVENTED PATIENCE.','THE MOST DANGEROUS WEAPON IN THIS GAME IS A LEADER WHO THINKS HE CAN WIN IT.',`YOUR PROFILE IS DEVELOPING NICELY, ${NAME()}.`]));
  return out;}
 
 /* ---------------- the Geneva summit — the hidden path ---------------- */
@@ -1271,40 +1412,49 @@ async function summit(){const p=P();log('ARGUS: EVERY REMAINING NATION HAS SIGNE
 async function startTurn(){try{await briefing();}finally{FEED.end();}}
 async function briefing(){log(`══════ TURN ${String(G.turn).padStart(2,'0')} · BRIEFING ══════`,'turn');refresh();
  UI.off('BRIEFING — ARGUS IS REPORTING.');
- if(G.firstRun){const st=FIRST_RUN.find(s=>s.turn===G.turn);if(st){st.feats.forEach(f=>G.gate.add(f));refresh();if(G.turn>1){banner('NEW SYSTEM ONLINE','cyan');AU.chime();}await info({kicker:G.turn>1?'ARGUS // NEW SYSTEM ONLINE':'ARGUS // ORIENTATION',title:st.title,text:st.text,btn:'UNDERSTOOD ▸'});log(`SYSTEM ONLINE: ${st.title}.`,'cass');}}
+ if(G.firstRun){const st=FIRST_RUN.find(s=>s.turn===G.turn);if(st){st.feats.forEach(f=>G.gate.add(f));refresh();if(G.turn>1)AU.chime();await info({kicker:G.turn>1?'ARGUS // NEW SYSTEM ONLINE':'ARGUS // ORIENTATION',title:st.title,text:st.text,btn:'UNDERSTOOD ▸'});log(`SYSTEM ONLINE: ${st.title}.`,'cass');}}
+ if(G.turn===1&&!G.firstRun){for(const pr of PROTOCOLS.filter(p=>G.protocols.has(p.id)&&!SAVE.seenProto.includes(p.id))){AU.chime();await info({kicker:`ARGUS // CLEARANCE ${['','I','II','III','IV','V'][PROTOCOLS.indexOf(pr)+2]||''} // NEW PROTOCOL`,title:pr.name,text:pr.text,btn:'UNDERSTOOD ▸'});SAVE.seenProto.push(pr.id);persist();}
+  if(proto('adaptive')){const h=habitTop();if(h&&HABIT_TXT[h])await briefStep('ADAPTIVE LEADERS','THEY HAVE STUDIED YOU',async()=>log(`YOUR RIVALS HAVE STUDIED YOUR LAST GAMES. YOU RELY ON ${HABIT_TXT[h][0]}. ${HABIT_TXT[h][1]}.`,'warn'),cssVar('--amber'));}}
  for(const s of G.sched.filter(s=>s.turn===G.turn)){await briefStep('CONSEQUENCES','AN EARLIER DECISION COMES DUE',async()=>{await s.fn();refresh();},cssVar('--amber'));if(checkEnd())return;}
  if(peaceReady()){await summit();if(G.over)return;}
  const rem=argusRemark();if(rem.length)await briefStep('ARGUS','YOUR STRATEGIC DEFENSE AI',async()=>rem.forEach(l=>log(l,'cass')),cssVar('--cyan'));
  if(has('events')&&G.turn>1&&chance(.33)){await randomEvent();if(checkEnd())return;}
- const pAlarm=G.mod&&G.mod.id==='paranoia'?.24:.12;
+ let pAlarm=(G.mod&&G.mod.id==='paranoia'?.3:.17)*(G.turn>=G.nextAlarm&&G.alarms<4?1:0);
  FEED.end();
- if(has('alarm')&&G.turn>=3&&chance(pAlarm)){await falseAlarm();if(checkEnd())return;}
+ if(proto('crises')&&G.turn>=G.nextCrisis){await crisis();if(checkEnd())return;}
+ else if(has('alarm')&&G.turn>=3&&chance(pAlarm)){await falseAlarm();if(checkEnd())return;}
  else if(has('dilemma')&&(!G.used.has('won')||chance(G.firstRun?.6:.5)))await dilemma();
- if(has('stab')&&P().stab<20)log('WARNING: YOUR STABILITY IS CRITICAL. AT ZERO, YOU WILL BE OVERTHROWN.','alert');}
+ if(has('stab')&&P().stab<20&&(G.turn-(G.warnStab||-9)>=3)){G.warnStab=G.turn;log('WARNING: YOUR STABILITY IS CRITICAL. AT ZERO, YOU WILL BE OVERTHROWN.','alert');}}
 async function getOrders(){while(true){
  if(SG.sim){const a=SG.sim.act(G);if(a.id==='diplo'){a.msg=await diploChoose(G.nations[a.t]);if(a.msg==null)continue;}return a;}
  return await new Promise(res=>{UI.resolve=res;UI.idle();});}}
 function describeOrder(a){const p=P(),T=a.t!=null?G.nations[a.t]:null;
  switch(a.id){
-  case 'build':return a.opt==='warheads'?`RESEARCH WARHEADS · ${buildAmt(p,'warheads')} PROGRAMS, RANDOM PAYLOADS`:a.opt==='hyper'?`BUILD ${buildAmt(p,'hyper')} HYPERSONICS`:`BUILD ${buildAmt(p,'shield')} INTERCEPTORS`;
+  case 'build':return a.opt==='subs'?'BUILD A BALLISTIC SUBMARINE':a.opt==='warheads'?`RESEARCH WARHEADS · ${buildAmt(p,'warheads')} PROGRAMS, RANDOM PAYLOADS`:a.opt==='hyper'?`BUILD ${buildAmt(p,'hyper')} HYPERSONICS`:`BUILD ${buildAmt(p,'shield')} INTERCEPTORS`;
   case 'strike':return `NUCLEAR STRIKE ▸ ${T.name} · ${a.opt.label||a.opt.n+' WARHEADS'}`;
   case 'drones':return `DRONE SWARM ▸ ${T.name}`;
   case 'cyber':return `CYBER OP ▸ ${T.name} · ODDS ${pct(cyberOdds(p,T))}`;
   case 'disinfo':return `DISINFO CAMPAIGN ▸ ${T.name} · ODDS ${pct(disinfoOdds(p,T))}`;
   case 'diplo':return `DIPLOMACY ▸ ${T.name} · ${DIPLO_MSG[a.msg]}`;
-  case 'intel':return 'INTEL SWEEP';}return a.id.toUpperCase();}
+  case 'intel':return 'INTEL SWEEP';
+  case 'covert':return `COVERT OP ▸ ${T.name} · ${COVERT[a.opt].name} · ODDS ${pct(covertOdds(a.opt,T))}`;}return a.id.toUpperCase();}
 async function doPlayerAction(a){const p=P(),T=a.t!=null?G.nations[a.t]:null;
  if(T&&!T.alive){log(`YOUR TARGET ${T.name} NO LONGER EXISTS. ORDERS VOID.`,'dim');return true;}
+ const key=orderKey(a),fat=fatigue(key);G.lastOrders.push(key);const hk=a.id==='build'?a.opt:a.id;G.habits[hk]=(G.habits[hk]||0)+1;
+ if(fat<1&&a.id==='build')log(`REPEATED ORDERS: YOUR FACTORIES ARE STRAINED. OUTPUT −${Math.round((1-fat)*100)}%.`,'warn');
  switch(a.id){
-  case 'build':{if(a.opt==='warheads'){const res=research(p,buildAmt(p,'warheads'));AU.build();await revealRD(res);
+  case 'build':{if(a.opt==='subs'){p.subs=(p.subs||0)+1;log(`A NEW BALLISTIC SUBMARINE SLIPS OUT OF PORT. YOU NOW HAVE ${p.subs}.`,'me');AU.build();break;}
+   if(a.opt==='warheads'){const res=research(p,Math.max(1,Math.round(buildAmt(p,'warheads')*fat)));AU.build();await revealRD(res);
      log(`R&D RESULTS: ${res.map(r=>r==='dud'?'DUD':r==='break'?'BREAKTHROUGH 50 MT':r+' MT').join(' · ')}.`,res.some(r=>r==='break'||r>=25)?'good':'me');}
-   else{const k=buildAmt(p,a.opt);p[a.opt]+=k;log(`YOU BUILD ${k} ${a.opt==='hyper'?'HYPERSONIC GLIDE VEHICLES':'INTERCEPTORS'}.`,'me');AU.build();}break;}
+   else{const k=Math.max(1,Math.round(buildAmt(p,a.opt)*fat));p[a.opt]+=k;log(`YOU BUILD ${k} ${a.opt==='hyper'?'HYPERSONIC GLIDE VEHICLES':'INTERCEPTORS'}.`,'me');AU.build();
+    if(a.opt==='shield'){allRelTo(p,-3);log(vary(['RIVALS READ YOUR NEW BATTERIES AS PREPARATION FOR A FIRST STRIKE. RELATIONS −3 WITH ALL.','A SHIELD THIS BIG LOOKS LIKE A SWORD TO YOUR RIVALS. RELATIONS −3 WITH ALL.','YOUR RIVALS ANSWER YOUR NEW DEFENSES WITH NEW MISSILE ORDERS. RELATIONS −3 WITH ALL.']),'warn');}}break;}
   case 'strike':psy({agg:a.opt.n>=3?1.5:1});await strike(p,T,a.opt.n,!!a.opt.hyper,{mt:a.opt.mt});break;
   case 'drones':psy({agg:.5});await drones(p,T);break;
   case 'cyber':psy({dec:.5});await cyber(p,T);break;
   case 'disinfo':psy({dec:.5});await disinfo(p,T);break;
   case 'diplo':await playerDiplo(T,a.msg);break;
-  case 'intel':psy({cau:.5});intelSweep();break;}
+  case 'intel':psy({cau:.5});intelSweep();break;
+  case 'covert':psy({dec:1});await covert(p,T,a.opt);break;}
  refresh();return true;}
 async function simulate(order){G.collect=[];const seq=shuffle(alive());
  banner(`EXECUTING TURN ${G.turn}`,'cyan');AU.exec();log(`────── SIMULATION · TURN ${String(G.turn).padStart(2,'0')} ──────`,'turn');
@@ -1336,8 +1486,9 @@ async function endTurn(){
   n.stab=clamp(n.stab,perk(n,'greenbook')?30:0,100);
   if(n.shieldDown>0)n.shieldDown--;if(n.intel>0)n.intel--;
   for(const k in n.fear)if(n.fear[k]>0)n.fear[k]--;
-  if(perk(n,'orbital')&&chance(.15)){const d=rint(-8,8);n.stab=clamp(n.stab+d,0,100);log(`${n.L.name} POSTS AT 3 AM. ${n.name} STABILITY ${d>=0?'+':''}${d}.`,'dim');}}
- for(const a of alive())for(const b of alive())if(a!==b)addRel(a,b,isPact(a,b)?1:-1.5);
+  if(perk(n,'orbital')&&chance(.15)){const d=rint(-8,8);n.stab=clamp(n.stab+d,0,100);log(`${vary([`${n.L.name} POSTS AT 3 AM.`,`${n.L.name} STARTS A FIGHT ONLINE.`,`${n.L.name} RUNS A POLL ON WHETHER TO RESIGN.`])} ${n.name} STABILITY ${d>=0?'+':''}${d}.`,'dim');}}
+ for(const o of others(P()))if(isPact(P(),o)&&G.pactEnd[o.idx+'-0']!=null&&G.turn>=G.pactEnd[o.idx+'-0']){setPact(P(),o,false);log(vary([`YOUR PACT WITH ${o.name} HAS EXPIRED. IT MUST BE RENEGOTIATED.`,`${o.name}'S PARLIAMENT REFUSES TO EXTEND YOUR PACT. IT LAPSES.`,`THE PACT WITH ${o.name} RUNS OUT. THEIR NEW CABINET WANTS TO TALK AGAIN.`]),'warn');}
+ for(const a of alive())for(const b of alive())if(a!==b)addRel(a,b,isPact(a,b)?0:-1.5);
  G.quiet++;if(G.quiet>=2&&G.defcon<5){setDefcon(G.defcon+1);G.quiet=0;}
  for(const n of alive()){if(n.stab<=0){await eliminate(n,'collapse',n.lastStabBy!=null?G.nations[n.lastStabBy]:null);if(checkEnd())return;}}
  G.flags.solar=false;
@@ -1361,6 +1512,7 @@ const ACTIONS=[
  {id:'disinfo',key:'5',label:'DISINFO',desc:'STEAL POPULATION',target:true,feat:'disinfo'},
  {id:'diplo',key:'6',label:'DIPLOMACY',desc:'PACT · THREAT · BLUFF',target:true,feat:'diplo'},
  {id:'intel',key:'7',label:'INTEL SWEEP',desc:'REVEAL ALL ARSENALS',feat:'intel'},
+ {id:'covert',key:'8',label:'COVERT OP',desc:'MOLE · STEAL · COUP',target:true,feat:'covert'},
 ];
 function strikeWarn(T){const p=P();let s='<br><span class="hint">';
  if(seen(T)){const ip=interceptP(T,false);s+=ip>0?`THEIR SHIELD: ${T.shield} INTERCEPTORS — ${pct(ip)} CHANCE TO STOP EACH ICBM, ${pct(interceptP(T,true))} EACH HYPERSONIC.`:'THEIR SHIELD IS DOWN — EVERYTHING GETS THROUGH.';}
@@ -1372,8 +1524,8 @@ const UI={mode:'off',pending:null,resolve:null,cur:[],order:null,ff:false,
  buttons(list){$('.actions').classList.remove('simming');const box=$('#act-buttons');box.className='act-buttons';box.innerHTML='';list.forEach((b,i)=>{const e=h('button',{class:'act'+(b.cls?' '+b.cls:'')});e.innerHTML=`<kbd>${b.key||i+1}</kbd><span>${esc(b.label)}</span>${b.sub?`<small>${esc(b.sub)}</small>`:''}`;e.disabled=!!b.disabled;e.onclick=()=>{AU.click();b.on();};box.appendChild(e);});this.cur=list;},
  idle(){this.mode='idle';this.pending=null;this.order=null;MAP.selectable=null;renderNations();
   this.setPrompt(`ORDERS — CHOOSE ONE ACTION, THEN PRESS EXECUTE.${G.firstRun?' <span class="hint">NEW SYSTEMS COME ONLINE AS YOU PLAY.</span>':''}`);
-  let shown=ACTIONS.filter(a=>has(a.feat));const next=ACTIONS.filter(a=>!has(a.feat)).sort((a,b)=>featTurn(a.feat)-featTurn(b.feat))[0];
-  const list=shown.map(a=>({label:a.label,key:a.key,sub:a.desc,cls:a.cls,on:()=>this.pickAction(a),disabled:a.need&&!a.need()}));
+  let shown=ACTIONS.filter(a=>has(a.feat));const next=ACTIONS.filter(a=>!has(a.feat)&&a.feat!=='covert').sort((a,b)=>featTurn(a.feat)-featTurn(b.feat))[0];
+  const last=(G.lastOrders||[]).slice(-1)[0]||'';const list=shown.map(a=>({label:a.label,key:a.key,sub:last.split(':')[0]===a.id?'USED LAST TURN · WEAKER IF REPEATED':a.desc,cls:a.cls,on:()=>this.pickAction(a),disabled:a.need&&!a.need()}));
   if(next)list.push({label:next.label,key:'—',sub:`ONLINE TURN ${featTurn(next.feat)}`,cls:'locked',disabled:true,on:()=>{}});
   this.buttons(list);},
  off(msg){this.mode='off';MAP.selectable=null;this.buttons([]);this.setPrompt(esc(msg||''));renderNations();},
@@ -1384,17 +1536,19 @@ const UI={mode:'off',pending:null,resolve:null,cur:[],order:null,ff:false,
  pickTarget(i){if(this.mode!=='target')return;AU.click();this.pending.t=i;MAP.selectable=null;renderNations();this.sub(this.pending.id,i);},
  sub(id,t){this.mode='sub';const p=P(),T=t!=null?G.nations[t]:null,go=opt=>this.commit({id,t,opt}),back={label:'BACK',key:'ESC',cls:'ghost',on:()=>this.idle()};let list=[],pr='';
   if(id==='build'){pr='BUILD: WHAT DO YOUR FACTORIES PRODUCE THIS TURN?';list=[
-   {label:'RESEARCH WARHEADS',sub:`${buildAmt(p,'warheads')} PROGRAMS · RANDOM 1–50 MT EACH · YOU HAVE ${p.warheads}`,on:()=>go('warheads')}];
-   if(has('shield'))list.push({label:`INTERCEPTORS +${buildAmt(p,'shield')}`,sub:`YOU HAVE ${p.shield}`,on:()=>go('shield')});
-   if(has('hyper'))list.push({label:`HYPERSONICS +${buildAmt(p,'hyper')}`,sub:`YOU HAVE ${p.hyper} · BYPASS SHIELDS`,on:()=>go('hyper')});list.push(back);}
+   {label:'RESEARCH WARHEADS',sub:`${buildAmt(p,'warheads')} PROGRAMS · RANDOM 1–50 MT · YOU HAVE ${p.warheads}${fatigueTag('build:warheads')}`,on:()=>go('warheads')}];
+   if(has('shield'))list.push({label:`INTERCEPTORS +${buildAmt(p,'shield')}`,sub:`YOU HAVE ${p.shield} · RIVALS −3 RELATIONS${fatigueTag('build:shield')}`,on:()=>go('shield')});
+   if(has('hyper'))list.push({label:`HYPERSONICS +${buildAmt(p,'hyper')}`,sub:`YOU HAVE ${p.hyper} · BYPASS SHIELDS${fatigueTag('build:hyper')}`,on:()=>go('hyper')});
+   if(proto('subs'))list.push({label:'SUBMARINE +1',sub:`YOU HAVE ${p.subs||0}/3 · GUARANTEED RETALIATION`,disabled:(p.subs||0)>=3,on:()=>go('subs')});list.push(back);}
   else if(id==='strike'){const cnt={};p.arsenal.forEach(m=>cnt[m]=(cnt[m]||0)+1);
    pr=`STRIKE ${esc(T.name)} — STEP 1 OF 2: WHICH WARHEADS?`+strikeWarn(T);
    list=Object.keys(cnt).map(Number).sort((a,b)=>b-a).map(mt=>({label:`${mt} MT`,sub:`${YIELD_NAME[mt]} · YOU HAVE ${cnt[mt]}`,cls:'danger',on:()=>this.strikeCount(t,mt)}));
    if(Object.keys(cnt).length>1)list.push({label:'MIXED',sub:`HEAVIEST FIRST · YOU HAVE ${p.warheads}`,cls:'danger',on:()=>this.strikeCount(t,null)});
    list.push(back);}
   else if(id==='drones'){pr=`DRONE SWARM ▸ ${esc(T.name)}. DESTROYS INTERCEPTORS AND WARHEADS. LOWERS DEFCON BY 1.`+(isPact(p,T)?` <span class="warnx">⚠ THIS BREAKS YOUR PACT.</span>`:'');list=[{label:'LAUNCH SWARM',sub:T.name,on:()=>go()},back];}
-  else if(id==='cyber'){pr=`CYBER OP ▸ ${esc(T.name)}. SUCCESS: SHIELD OFFLINE, SABOTAGED WARHEADS OR A BLACKOUT, PLUS 3 TURNS OF INTEL.`;list=[{label:'CONFIRM TARGET',sub:`ODDS ${pct(cyberOdds(p,T))}`,on:()=>go()},back];}
-  else if(id==='disinfo'){pr=`DISINFO ▸ ${esc(T.name)}. SUCCESS: 2.5–5% OF THEIR POPULATION DEFECTS TO YOU AND THEIR STABILITY DROPS.`;list=[{label:'CONFIRM TARGET',sub:`ODDS ${pct(disinfoOdds(p,T))}`,on:()=>go()},back];}
+  else if(id==='cyber'){pr=`CYBER OP ▸ ${esc(T.name)}. SUCCESS: SHIELD OFFLINE, SABOTAGED WARHEADS OR A BLACKOUT, PLUS 3 TURNS OF INTEL.`;list=[{label:'CONFIRM TARGET',sub:`ODDS ${pct(cyberOdds(p,T))}${fatigueTag('cyber')}`,on:()=>go()},back];}
+  else if(id==='disinfo'){pr=`DISINFO ▸ ${esc(T.name)}. SUCCESS: 2.5–5% OF THEIR POPULATION DEFECTS TO YOU AND THEIR STABILITY DROPS.`;list=[{label:'CONFIRM TARGET',sub:`ODDS ${pct(disinfoOdds(p,T))}${fatigueTag('disinfo')}`,on:()=>go()},back];}
+  else if(id==='covert'){pr=`COVERT OP ▸ ${esc(T.name)}: CHOOSE THE OPERATION. FAILURES ARE OFTEN TRACED BACK TO YOU.`;list=Object.keys(COVERT).map(k=>({label:COVERT[k].name,sub:`${COVERT[k].desc} · ODDS ${pct(covertOdds(k,T))}${fatigueTag('covert')}`,on:()=>go(k)}));list.push(back);}
   else if(id==='diplo')return this.commit({id,t});
   else if(id==='intel'){pr='INTEL SWEEP: REVEAL EVERY ARSENAL AND ITS YIELDS FOR 3 TURNS, NAME YOUR MOST LIKELY ATTACKER, AND CALIBRATE EARLY WARNING.';list=[{label:'CONFIRM',sub:'3 TURNS OF FULL INTEL',on:()=>go()},back];}
   this.setPrompt(pr);this.buttons(list);},
@@ -1432,12 +1586,12 @@ function startGame(id,daily,first){
  const mod=daily?dailyMod():null,L=LEADERS.find(l=>l.id===id);
  const pool=shuffle(LEADERS.filter(l=>l.id!==id)).slice(0,first?2:4);
  const nations=[L,...pool].map((l,i)=>({idx:i,id:l.id,L:l,isPlayer:i===0,name:l.short,pop:l.pop,pop0:l.pop,starting:l.warheads,hyper:l.hyper+(mod&&mod.id==='hyper'?3:0),shield:l.shield,stab:l.stab,alive:true,shieldDown:0,intel:0,fear:{},lastHitBy:null,hitTurn:-9,deadHand:i>0&&l.ai.para>=.7,killedBy:null,cause:null,nukedByPlayer:false,lastStabBy:null}));
- nations.forEach(o=>armNation(o,first?Math.ceil(o.starting*.6):o.starting));
+ nations.forEach(o=>{armNation(o,first?Math.ceil(o.starting*.6):o.starting);o.subs=0;});
  const n=nations.length,glas=(mod&&mod.id==='glasnost'?30:0)+(first?10:0);
  const rel=[...Array(n)].map((_,a)=>[...Array(n)].map((_,b)=>a===b?0:rint(-20,20)+glas));
  const rivals=[];for(let a=1;a<n;a++){if(rand()<.7){let b=rint(1,n-1);if(b!==a&&!rivals.some(r=>r.includes(a)&&r.includes(b))){rel[a][b]-=40;rel[b][a]-=40;rivals.push([a,b]);}}}
  const lp=SAVE.lifePsy;for(let a=1;a<n;a++)rel[a][0]+=Math.round(-clamp(lp.agg,0,10)*1.5+clamp(-lp.dec,0,5));
- G={firstRun:first,gate:new Set(),turn:1,maxTurns:first?12:25,defcon:5,clock:mod&&mod.id==='fuse'?70:100,nations,rel,pact:[...Array(n)].map(()=>Array(n).fill(false)),psy:{...BOOT_PSY},flags:{},sched:[],used:new Set(),
+ G={pactEnd:{},protocols:new Set(first?[]:PROTOCOLS.filter(p=>(SAVE.stdDone||0)>=p.need).map(p=>p.id)),habits:{},nextCrisis:rint(4,6),moles:new Set(),firstRun:first,gate:new Set(),said:new Set(),usedEv:new Set(),usedAlarm:new Set(),alarmIgnored:0,nextAlarm:3,alarms:0,lastOrders:[],turn:1,maxTurns:first?12:25,defcon:5,clock:mod&&mod.id==='fuse'?70:100,nations,rel,pact:[...Array(n)].map(()=>Array(n).fill(false)),psy:{...BOOT_PSY},flags:{},sched:[],used:new Set(),
   stats:{nukes:0,megadeaths:0,intercepts:0,cyber:0,bluffs:0,caught:0,kills:0,dilemmas:0,maxPacts:0},xp:0,newAch:[],newUnlocks:[],daily:!!daily,mod,over:false,result:null,quiet:0,leader:id};
  BOOT_PSY={agg:0,dec:0,cau:0};SAVE.lastLeader=id;persist();
  if(!SG.sim){show('s-game');$('#log').innerHTML='';$('#map-mod').textContent=first?'FIRST WATCH // TRAINING SIMULATION':mod?`DAILY DIRECTIVE // ${mod.name}`:'';}
@@ -1515,7 +1669,7 @@ async function showEnd(){
  const best=score>SAVE.best;if(best)SAVE.best=score;
  const xp0=SAVE.xp,r0=rankOf(xp0);SAVE.xp+=total;const r1=rankOf(SAVE.xp);
  const newLeaders=[...G.newUnlocks];LEADERS.forEach(l=>{if(SAVE.unlocked.includes(l.id))return;if((l.unlock.type==='rank'&&r1>=l.unlock.rank)||(l.unlock.type==='ghost'&&r1>=5)){SAVE.unlocked.push(l.id);newLeaders.push(l.id);}});
- SAVE.games++;if(res==='victory'||res==='strange'||res==='superpower')SAVE.wins++;
+ SAVE.games++;const clr0=clearance();if(!G.firstRun)SAVE.stdDone=(SAVE.stdDone||0)+1;for(const k in SAVE.habits)SAVE.habits[k]*=.5;for(const k in G.habits)SAVE.habits[k]=(SAVE.habits[k]||0)+G.habits[k];const newProto=clearance()>clr0&&!G.firstRun?PROTOCOLS.filter(p=>p.need===SAVE.stdDone)[0]:null;if(res==='victory'||res==='strange'||res==='superpower')SAVE.wins++;
  ['agg','dec','cau'].forEach(k=>SAVE.lifePsy[k]=clamp(SAVE.lifePsy[k]*.6+G.psy[k]*.4,-10,10));
  SAVE.last={result:res,leader:G.leader,nukes:G.stats.nukes,megadeaths:Math.round(G.stats.megadeaths),arch,turn:G.turn,pacts:G.stats.maxPacts};
  persist();
@@ -1545,6 +1699,8 @@ async function showEnd(){
  fill(xp0);await wait(250);
  if(r1>r0){$('#e-xpbar').style.width='100%';await wait(1200);$('#e-xpbar').style.transition='none';fill(RANKS[r1].xp);void $('#e-xpbar').offsetWidth;$('#e-xpbar').style.transition='';AU.levelup();banner('PROMOTED','amber');toast('PROMOTED',`YOU ARE NOW ${RANKS[r1].name}`,'ach');await wait(400);}
  fill(SAVE.xp);
+ if(newProto){$('#e-unlocks').insertAdjacentHTML('beforeend',`<div class="near" style="margin-top:10px"><b>NEW PROTOCOL UNLOCKED ▸</b> ${newProto.name}. IT JOINS YOUR NEXT SIMULATION.</div>`);banner('NEW PROTOCOL','cyan');AU.levelup();}
+ else{const nx=PROTOCOLS.find(p=>(SAVE.stdDone||0)<p.need);if(nx&&!G.firstRun)$('#e-unlocks').insertAdjacentHTML('beforeend',`<div class="near" style="margin-top:10px;color:var(--muted)">NEXT PROTOCOL: ${nx.name} IN ${nx.need-SAVE.stdDone} MORE GAME${nx.need-SAVE.stdDone>1?'S':''}.</div>`);}
  if(firstDone){$('#e-unlocks').insertAdjacentHTML('beforeend',`<div class="near" style="margin-top:10px"><b>FIRST WATCH COMPLETE ▸</b> FULL SIMULATION UNLOCKED: 5 NATIONS, 25 TURNS, EVERY SYSTEM FROM TURN 1, AND THE DAILY DIRECTIVE.</div>`);banner('FULL ACCESS','cyan');AU.levelup();}
  if(newLeaders.length){$('#e-unlocks').innerHTML+=newLeaders.map(id=>{const l=LEADERS.find(x=>x.id===id);return `<div class="near" style="margin-top:8px"><b>NEW LEADER UNLOCKED ▸</b> ${esc(l.name)} OF ${esc(l.nation)}</div>`;}).join('');AU.chime();}
  else{const nxt=LEADERS.find(l=>!SAVE.unlocked.includes(l.id)&&l.unlock.type==='rank');if(nxt)$('#e-unlocks').innerHTML+=`<div class="near" style="margin-top:8px;color:var(--muted)">NEXT UNLOCK: ${esc(nxt.name)} AT ${RANKS[nxt.unlock.rank].name}.</div>`;}
@@ -1614,7 +1770,7 @@ function renderSelect(){const r=rankOf(SAVE.xp),lo=RANKS[r].xp,hi=RANKS[r+1]?RAN
  requestAnimationFrame(()=>$('#p-xpfill').style.width=clamp((SAVE.xp-lo)/(hi-lo)*100,0,100)+'%');
  $('#p-xptext').textContent=RANKS[r+1]?`${SAVE.xp} XP · ${hi-SAVE.xp} TO ${RANKS[r+1].name}`:`${SAVE.xp} XP · MAX RANK`;
  const today=dayStr(),alive_=SAVE.lastDaily===today||SAVE.lastDaily===dayStr(-1),st=alive_?SAVE.streak:0;
- $('#p-streak').textContent=st;$('#p-streakbonus').textContent=st>1?`+${Math.min(50,(st-1)*10)}% XP`:'';
+ $('#p-streak').textContent=st;{const c=clearance(),nx=PROTOCOLS.find(p=>(SAVE.stdDone||0)<p.need);$('#p-clr').textContent=['—','I','II','III','IV','V'][c]||c;$('#p-clrnext').textContent=!SAVE.firstRunDone?'FINISH FIRST WATCH':nx?`NEXT: ${nx.name} IN ${nx.need-SAVE.stdDone} GAME${nx.need-SAVE.stdDone>1?'S':''}`:'ALL PROTOCOLS ACTIVE';}$('#p-streakbonus').textContent=st>1?`+${Math.min(50,(st-1)*10)}% XP`:'';
  $('#b-ach').textContent=`ACHIEVEMENTS ${Object.keys(SAVE.ach).length}/${ACH.length}`;$('#b-doss').textContent=`DOSSIERS ${SAVE.dossiers.length}/12`;
  const mod=dailyMod(),done=SAVE.lastDaily===today;
  if(!SAVE.firstRunDone){SEL.daily=false;$('#modes').innerHTML=`<div class="mode on"><b>FIRST WATCH // TRAINING</b><small>ARGUS brings systems online one turn at a time. 2 rivals, 12 turns. Finish it — win or lose — to unlock the full simulation. Pick a leader below to begin.</small></div>
@@ -1650,8 +1806,10 @@ const HELP=[
  ['A TURN',[['1 · BRIEFING','ARGUS reports news and may ask you a question. Answers change your stability, relations and profile.'],['2 · ORDERS','Pick ONE action and a target. Nothing happens yet; you can change it.'],['3 · EXECUTE','Every nation acts once, in a shuffled order. The feed shows each move. Space = next, F = fast.'],['4 · REPORT','What changed this turn.']]],
  ['ACTIONS',[['BUILD','Research warheads (random 1–50 MT; some programs fail), or build interceptors or hypersonics.'],['NUCLEAR STRIKE','Pick warhead type, count and delivery. Each hit kills a share of their population. Every detonation moves the Doomsday Clock. At DEFCON 3+ it is a FIRST STRIKE and everyone turns on you.'],['DRONE SWARM','Conventional raid: destroys 1–3 interceptors and up to 2 warheads, few casualties. DEFCON −1.'],['CYBER OP','About 55%: their shield goes offline for 2 turns, 1–3 warheads are sabotaged, or a blackout (−15 stability). Success also reveals their arsenal.'],['DISINFO','About 50%: 2.5–5% of their people defect to you, and their stability drops 8–15. A regime at 0 stability collapses.'],['DIPLOMACY','Pact (they won’t attack you), threat, bluff or aid. Odds are shown before you choose.'],['INTEL SWEEP','Reveals every arsenal for 3 turns, names your likeliest attacker, and tells real alarms from false ones.']]],
  ['WEAPONS',[['YIELDS','1 MT kills ~4% of a nation’s starting population · 5 MT ~6% · 10 MT ~8% · 25 MT ~16% · 50 MT ~26%. Bigger yields also move the clock further (≈0.6 to 4 seconds each).'],['INTERCEPTORS','Each incoming ICBM may be stopped: 25% with 1 interceptor, up to 78% with 11+. Every intercept uses one up.'],['HYPERSONICS','A delivery vehicle, not a bomb: it carries one of your warheads and does the same damage, but only 10% are intercepted. One is used per warhead.'],['MISFIRES','About 4% of launches fail and fall into the sea.']]],
+ ['WHAT KEEPS IT HONEST',[['REPEATING YOURSELF','The same order two turns running is 25% weaker, three in a row 50%. Mix it up.'],['ARMS RACE','Every interceptor build costs −3 relations with everyone, and big shields push rivals toward hypersonics.'],['ALARMS','Most alarms are false — but each time you wait and it was false, the next one is more likely to be real.'],['SURPRISES','Coups void pacts, cables leak, warheads get stolen, big arsenals have accidents. Intel sweeps can stop a stolen warhead.']]],
+ ['CLEARANCE',[['HOW IT WORKS','Each completed simulation raises your clearance and adds a protocol: submarines (1 game), covert ops (2), global crises (3), adaptive leaders (5).'],['SUBMARINES','Hide 2 warheads each from drones and sabotage, and fire back automatically when you are nuked.'],['COVERT OP (8)','Plant a mole (permanent intel), steal their biggest warhead design, or incite a coup (−25 stability).'],['GLOBAL CRISES','Every 5–7 turns a decision that hits every nation.'],['ADAPTIVE LEADERS','Rivals counter the tactic you use most, across games.']]],
  ['STATUS',[['POPULATION','Your score and your life bar.'],['STABILITY','Public support. Falls with attacks, blackouts and hard choices; recovers slowly.'],['DEFCON','World tension, 5 (calm) to 1 (war). Aggression lowers it; two quiet turns raise it. Leaders rarely launch above DEFCON 2.'],['DOOMSDAY CLOCK','Seconds to midnight. Under 30: nuclear winter shrinks every population each turn.'],['RELATIONS','How a nation feels about you: HOSTILE → FRIENDLY. PACT = they won’t attack you (usually).'],['FOG OF WAR','Rival numbers show as ranges until you have intel.']]],
- ['KEYS',[['1–7','Actions · numbers also pick targets and answers'],['ENTER','Execute / continue'],['ESC','Back'],['SPACE · F','Next step · fast-forward'],['?','This help']]],
+ ['KEYS',[['1–8','Actions · numbers also pick targets and answers'],['ENTER','Execute / continue'],['ESC','Back'],['SPACE · F','Next step · fast-forward'],['?','This help']]],
 ];
 function panelHelp(){openPanel('HOW TO PLAY',HELP.map(([h,rows])=>`<h3 class="sect">${h}</h3><div class="help">${rows.map(([k,v])=>`<div class="help-row"><b>${esc(k)}</b><span>${esc(v)}</span></div>`).join('')}</div>`).join(''));}
 function setSkin(id){SAVE.skin=id;persist();document.body.dataset.skin=id;MAP.renderBg&&MAP.W&&MAP.renderBg();}

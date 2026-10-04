@@ -50,6 +50,55 @@ Real-speed playtests use an instrumented bot that reads at human pace. Before tu
 
 A turn takes about 60–100 s at full reading pace; FAST and Space shorten it.
 
+## Variety and replayability
+
+Measured with `tools/balance-sim.js`-style headless runs. Each figure is the share of log lines in a game that repeat (numbers ignored); structural headers are excluded.
+
+| | Before | After |
+|---|---|---|
+| Varied play: lines repeated within a game | 30% | 15% |
+| Passive play (pacts + interceptors): lines repeated | 37% | 24% |
+| Passive play: wins | 72% | ~42% |
+| Passive play: annihilated or deposed | 7% | ~27% |
+
+What changed:
+- **Early-warning alarms:** 8 scenarios drawn from real Cold War incidents (moonrise on radar, a training tape, a failed 46-cent chip, a bear at a fence, a weather rocket, and more).
+  - No scenario repeats within a game. There are at least 3 turns between alarms and at most 4 per game.
+  - ARGUS's confidence figure tracks the real odds, with noise.
+  - **Each time you wait and it turns out false, the next alarm is more likely to be real** (+14% per wait).
+  - A third option, SCRAMBLE DEFENSES, spends 2 interceptors for +25% interception this turn.
+- **No repeats within a game:** world events, ARGUS remarks (three pools: calm, tense, dark), leader quotes (a varied reaction replaces a repeat), and incoming offers (each leader waits at least 4 turns between offers).
+- **Variants:** AI moves, combat reports, drone raids, retaliation, cyber probes, DEFCON messages.
+- **Questions not seen in earlier games** are preferred, 80% of the time.
+- **Incoming offers have five kinds:** pact, ultimatum, intel trade, a request for interceptors, and a joint campaign against a third nation.
+- **The jokes stop as the clock falls.** Below 60 seconds, leaders sometimes switch to sober lines; below 30 seconds, always. ARGUS's remarks darken the same way.
+
+### Mechanisms against autopilot
+- **Repetition penalty:** the same order two turns running is 25% weaker, three in a row 50%. Menus show the penalty.
+- **Arms race:** each interceptor build costs −3 relations with everyone, and big shields push rivals toward hypersonics.
+- **Shields don't deter:** only warheads and hypersonics make rivals hesitate.
+- **Pacts expire** after 6–9 turns and must be renegotiated. Pacts no longer warm relations by themselves.
+- **Surprises:**
+  - military coups that void every treaty a nation signed
+  - leaked diplomatic cables
+  - hotline cuts
+  - surprise election swings
+  - stolen warheads (a recent intel sweep traces them in time)
+  - accidents at oversized arsenals
+  - maintenance scandals that scrap stockpiled interceptors
+  - sudden hypersonic breakthroughs
+
+## Clearance ladder
+
+Each completed standard or daily simulation raises your clearance and adds a protocol, introduced with a briefing card:
+
+| Games completed | Protocol |
+|---|---|
+| 1 | **Ballistic submarines.** Build up to 3. Each hides 2 warheads from drones and sabotage and fires back automatically when you're nuked. Rivals are deterred by them, and rivals build them too. |
+| 2 | **Covert ops** (action 8). Plant a mole (permanent intel), steal their largest warhead design, or incite a coup (−25 stability). Failures are often traced back to you. |
+| 3 | **Global crises.** Every 5–7 turns: an orbital weapon, grid collapse, emergency UN vote (possibly against you), global famine, or another nation's AI that wants to negotiate with ARGUS. |
+| 5 | **Adaptive leaders.** Rivals study your habits across games and counter your favourite tactic. |
+
 ## Warhead lottery
 
 Hypersonics are delivery vehicles, not bombs: each one carries one of your warheads, does that warhead's damage, and is intercepted only 10% of the time, against up to 78% for an ICBM.
