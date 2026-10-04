@@ -30,12 +30,29 @@ AI leaders follow the same schedule, so nobody can do something you can't. Locke
 
 Every turn has four phases, shown in the HUD:
 
-1. **Briefing.** ARGUS reports: new systems, world events, a question or an early-warning alarm.
+1. **Briefing.** ARGUS reports new systems, consequences of earlier choices, its own remarks and world events, one card at a time in the feed. Then it may ask a question or sound an early-warning alarm.
 2. **Orders.** You choose one action and a target. The order is staged, not executed; you can change it.
-3. **Simulation.** Press **EXECUTE TURN** (or Enter). Every nation carries out its orders in sequence. A progress strip shows whose move it is, and each step is headed in the log. Fast-forward is available.
+3. **Simulation.** Press **EXECUTE TURN** (or Enter). Every nation acts once, in an order shuffled each turn. The feed shows one nation per card: a large headline, then results typed out at reading speed. It auto-advances after a pause sized to the text (about 20 characters per second, 2.5–15 s; routine one-liners 1.8 s). Space skips ahead, F fast-forwards, and auto-advance can be switched off. A progress strip shows whose move it is.
 4. **Report.** An after-action summary: population change per nation, new or broken pacts, eliminations, your warheads and stability, DEFCON and the clock, and the key events.
 
+## Help
+
+A **? HELP** button (or the `?` key) opens a one-page reference: goal, the four phases, every action with its odds and effects, weapon numbers (damage per yield, interceptor odds, what hypersonics do) and the status meters.
+
+## Readability and pacing (measured)
+
+Real-speed playtests use an instrumented bot that reads at human pace. Before tuning, long simulation steps advanced at 30–60 characters per second, banners replaced each other within 1.5 s, damage labels stacked on the same city, briefing events appeared only in the small log, and pressing Enter to close a pop-up also skipped the next feed step. Now:
+- feed steps hold at about 12–20 characters per second
+- banners queue, with at least 1.4 s each
+- map damage labels stack in separate lanes and stay up for 2.6 s
+- every briefing item, including world events, early-warning launches and consequences, gets its own feed card
+- the feed ignores skip presses in the first 0.45 s of a pause
+
+A turn takes about 60–100 s at full reading pace; FAST and Space shorten it.
+
 ## Warhead lottery
+
+Hypersonics are delivery vehicles, not bombs: each one carries one of your warheads, does that warhead's damage, and is intercepted only 10% of the time, against up to 78% for an ICBM.
 
 Every warhead has a rolled yield: 1 MT tactical, 5 MT city-buster, 10 MT metro, 25 MT regional, or 50 MT Tsar-class. Bigger yields are rarer. Researching warheads runs several programs, revealed one by one. Each program produces a random payload; about 7% fail outright and about 4% hit a 50 MT breakthrough. When you strike, you choose which yield to fire. Bigger bombs kill more and move the Doomsday Clock further. Any warhead can misfire (about 4%). Intel reveals a rival's yields, not just its warhead count.
 
@@ -51,7 +68,7 @@ Every warhead has a rolled yield: 1 MT tactical, 5 MT city-buster, 10 MT metro, 
 | Key | Action | What it does |
 |---|---|---|
 | 1 | Build | Research warheads (random yields), hypersonics (~90% get through shields) or interceptors |
-| 2 | Nuclear strike | Fire one warhead of a chosen yield, a salvo of your 3 or 6 largest, or a hypersonic. At DEFCON 3+ it counts as a **first strike**, and every nation turns on you. |
+| 2 | Nuclear strike | Two steps: choose the warhead type (one yield, or mixed heaviest-first), then the count (1, 2, 3, 6 or all) and delivery (ICBM or hypersonic). Each option shows the maximum casualties and Doomsday Clock cost; with intel, the target's chance to intercept is also shown. At DEFCON 3+ it counts as a **first strike**, and every nation turns on you. |
 | 3 | Drone swarm | Conventional counterforce strike. Destroys interceptors and warheads; DEFCON −1. |
 | 4 | Cyber op | Knocks out shields, sabotages warheads, or causes a blackout, plus 3 turns of intel. |
 | 5 | Disinfo | Steals a share of a rival's population and drains their stability. At 0 stability the regime collapses. |
