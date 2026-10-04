@@ -1527,7 +1527,7 @@ async function boot(){const id=++BOOT_ID,T=$('#term');T.innerHTML='';show('s-ter
 /* =====================================================================
    SELECT SCREEN + PANELS
    ===================================================================== */
-const SEL={daily:false};
+const SEL={daily:false,first:false};
 function goSelect(){BOOT_ID++;show('s-select');renderSelect();}
 function renderSelect(){const r=rankOf(SAVE.xp),lo=RANKS[r].xp,hi=RANKS[r+1]?RANKS[r+1].xp:lo+1;
  $('#p-name').textContent=NAME();$('#p-rank').textContent=`RANK // ${RANKS[r].name}`;
@@ -1539,16 +1539,17 @@ function renderSelect(){const r=rankOf(SAVE.xp),lo=RANKS[r].xp,hi=RANKS[r+1]?RAN
  const mod=dailyMod(),done=SAVE.lastDaily===today;
  if(!SAVE.firstRunDone){SEL.daily=false;$('#modes').innerHTML=`<div class="mode on"><b>FIRST WATCH // TRAINING</b><small>ARGUS brings systems online one turn at a time. 2 rivals, 12 turns. Finish it — win or lose — to unlock the full simulation. Pick a leader below to begin.</small></div>
   <div class="mode locked"><b>STANDARD · DAILY DIRECTIVE</b><small>LOCKED — COMPLETE FIRST WATCH. 5 nations, 25 turns, every system from turn 1, daily world with streak bonus.</small></div>`;}
- else $('#modes').innerHTML=`<button class="mode ${SEL.daily?'':'on'}" id="m-std"><b>STANDARD SIMULATION</b><small>Random opponents. Full XP.</small></button>
-  <button class="mode ${SEL.daily?'on':''}" id="m-daily"><b>DAILY DIRECTIVE // ${mod.name}</b><small>${mod.desc} Same world for everyone today. ×1.5 XP and +1 streak on first completion.</small>${done?'<span class="done">COMPLETED TODAY · REPLAY FOR PRACTICE</span>':''}</button>`;
- if(SAVE.firstRunDone){$('#m-std').onclick=()=>{AU.click();SEL.daily=false;renderSelect();};$('#m-daily').onclick=()=>{AU.click();SEL.daily=true;renderSelect();};}
+ else $('#modes').innerHTML=`<button class="mode ${SEL.daily||SEL.first?'':'on'}" id="m-std"><b>STANDARD SIMULATION</b><small>Random opponents. Full XP.</small></button>
+  <button class="mode ${SEL.daily?'on':''}" id="m-daily"><b>DAILY DIRECTIVE // ${mod.name}</b><small>${mod.desc} Same world for everyone today. ×1.5 XP and +1 streak on first completion.</small>${done?'<span class="done">COMPLETED TODAY · REPLAY FOR PRACTICE</span>':''}</button>
+  <button class="mode ${SEL.first?'on':''}" id="m-first"><b>FIRST WATCH // REPLAY</b><small>The guided training run: 2 rivals, 12 turns, systems come online one at a time.</small></button>`;
+ if(SAVE.firstRunDone){$('#m-std').onclick=()=>{AU.click();SEL.daily=false;SEL.first=false;renderSelect();};$('#m-daily').onclick=()=>{AU.click();SEL.daily=true;SEL.first=false;renderSelect();};$('#m-first').onclick=()=>{AU.click();SEL.first=true;SEL.daily=false;renderSelect();};}
  const box=$('#leaders');box.innerHTML='';
  LEADERS.forEach(l=>{const un=SAVE.unlocked.includes(l.id),c=h('button',{class:'lcard'+(un?'':' locked')});c.style.setProperty('--lc',l.color);
   c.innerHTML=`${l.unlock.type==='ghost'?'<span class="ghost-tag">GHOST PROTOCOL</span>':''}<div class="lnat">${esc(l.title)} · ${esc(l.nation)}</div><div class="ln">${esc(l.name)}</div>
    <div class="lperk"><b>${esc(l.perk.name)}</b>${esc(l.perk.desc)}</div>
    <div class="lstats"><span>POP <b>${l.pop}M</b></span><span>WARHEADS <b>${l.warheads}</b></span><span>HYPER <b>${l.hyper}</b></span><span>SHIELD <b>${l.shield}</b></span><span>STAB <b>${l.stab}</b></span></div>
    ${un?'':`<div class="lock"><b>LOCKED</b><small>${l.unlock.type==='rank'?`REACH ${RANKS[l.unlock.rank].name}`:'ELIMINATE THIS LEADER IN BATTLE TO UNLOCK'}</small></div>`}`;
-  if(un)c.onclick=()=>{AU.select();startGame(l.id,SEL.daily);};else c.setAttribute('aria-disabled','true');box.appendChild(c);});}
+  if(un)c.onclick=()=>{AU.select();startGame(l.id,SEL.daily,SAVE.firstRunDone?SEL.first:true);};else c.setAttribute('aria-disabled','true');box.appendChild(c);});}
 function openPanel(title,html){$('#panel-title').textContent=title;$('#panel-body').innerHTML=html;$('#panel').hidden=false;AU.click();$('#panel-close').focus({preventScroll:true});}
 function closePanel(){$('#panel').hidden=true;}
 function panelAch(){openPanel('ACHIEVEMENTS',`<div class="grid2">${ACH.map(a=>{const got=!!SAVE.ach[a.id];return `<div class="achv ${got?'got':''}"><b>${a.secret&&!got?'??????':a.name}</b><small>${a.secret&&!got?'A SECRET ENDING.':a.desc}</small><span class="xp">+${a.xp} XP</span></div>`;}).join('')}</div>`);}
