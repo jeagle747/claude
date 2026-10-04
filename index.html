@@ -1,0 +1,1425 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Strange Game</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=VT323&display=swap" rel="stylesheet">
+<style>
+/* Layout: one CRT "big board" — HUD strip on top, NORAD map + nation dossiers, terminal log, command bar.
+   Single deliberate dark look (phosphor CRT); skins swap the phosphor tokens. */
+:root{
+  color-scheme:dark;
+  --bg:#020509; --panel:#040c14; --line:#0d2b36; --line-hi:#17505f;
+  --phos:#3dffa8; --phos-dim:#1c7a55; --text:#c4f7e0; --muted:#5f8f81;
+  --cyan:#29e0ff; --mag:#ff2bd6; --amber:#ffb627; --red:#ff3355; --white:#f4fbff;
+  --land:#1fb7d0;
+  --f-disp:'VT323','Courier New',monospace;
+  --f-body:'Share Tech Mono',ui-monospace,'Cascadia Mono','Courier New',monospace;
+}
+body[data-skin=amber]{--phos:#ffb000;--phos-dim:#8a5d00;--text:#ffe2a6;--muted:#9a8358;--land:#d08a1f}
+body[data-skin=cyan]{--phos:#29e0ff;--phos-dim:#13708a;--text:#c9f6ff;--muted:#5c8794;--land:#2a7cff}
+body[data-skin=synth]{--phos:#ff4fd8;--phos-dim:#85246f;--text:#ffd6f6;--muted:#9a6d90;--land:#7a5cff}
+body[data-skin=white]{--phos:#e8f4ff;--phos-dim:#6d7d8c;--text:#f2f7fb;--muted:#8796a3;--land:#8fa6bf}
+body[data-skin=red]{--phos:#ff4d4d;--phos-dim:#8a2020;--text:#ffd2d2;--muted:#a06868;--land:#c0392b}
+
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--f-body);font-size:14px;line-height:1.45;overflow:hidden;-webkit-font-smoothing:antialiased}
+body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:70;background:repeating-linear-gradient(to bottom,transparent 0,transparent 2px,rgba(0,0,0,.26) 3px)}
+body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:71;background:radial-gradient(ellipse at center,transparent 58%,rgba(0,0,0,.6) 100%)}
+#crt{height:100%;position:relative;animation:flicker 7s infinite}
+@keyframes flicker{0%,96%,100%{opacity:1}97%{opacity:.93}98%{opacity:1}99%{opacity:.96}}
+.screen{height:100%}
+[hidden]{display:none!important}
+button{font:inherit;color:inherit}
+kbd{font-family:var(--f-disp)}
+:focus-visible{outline:1px dashed var(--phos);outline-offset:2px}
+.btn{font-family:var(--f-disp);font-size:22px;letter-spacing:.06em;color:var(--phos);background:transparent;border:1px solid var(--phos-dim);padding:6px 16px;cursor:pointer;text-shadow:0 0 8px var(--phos);transition:background .15s,box-shadow .15s}
+.btn:hover,.btn:focus-visible{background:color-mix(in srgb,var(--phos) 14%,transparent);box-shadow:0 0 16px color-mix(in srgb,var(--phos) 40%,transparent);outline:none}
+.btn.big{font-size:28px;padding:10px 26px}
+.btn.ghost{border-color:transparent;color:var(--muted);text-shadow:none}
+.btn.sm{font-size:18px;padding:3px 10px}
+
+/* ---------- CONNECT ---------- */
+#s-connect{display:grid;place-items:center;padding:24px 16px;cursor:pointer}
+.connect{text-align:center;display:grid;gap:18px;justify-items:center}
+.c-kicker{color:var(--muted);letter-spacing:.32em;font-size:12px}
+.c-title{font-family:var(--f-disp);font-weight:400;font-size:clamp(76px,17vw,190px);line-height:.8;margin:0;color:var(--phos);text-shadow:0 0 22px var(--phos),0 0 3px var(--white);letter-spacing:.04em}
+.c-sub{font-family:var(--f-disp);font-size:clamp(18px,3vw,26px);color:var(--cyan);letter-spacing:.24em;margin:0;text-shadow:0 0 10px var(--cyan)}
+.c-foot{color:var(--muted);font-size:11px;letter-spacing:.2em;margin:0}
+.pulse{animation:pulse 1.6s ease-in-out infinite}
+@keyframes pulse{50%{box-shadow:0 0 26px color-mix(in srgb,var(--phos) 60%,transparent)}}
+
+/* ---------- TERMINAL ---------- */
+#s-term{position:relative;padding:28px 16px 70px}
+.term{max-width:920px;margin:0 auto;height:100%;overflow-y:auto;font-family:var(--f-disp);font-size:clamp(20px,2.6vw,28px);line-height:1.15;color:var(--phos);text-shadow:0 0 8px var(--phos);scrollbar-width:none}
+.tline{white-space:pre-wrap;min-height:1.15em}
+.tline.dim{color:var(--phos-dim);text-shadow:none}
+.tline.mag{color:var(--mag);text-shadow:0 0 8px var(--mag)}
+.tline.cyan{color:var(--cyan);text-shadow:0 0 8px var(--cyan)}
+.inrow{display:flex;gap:0;align-items:baseline}
+.tinput{flex:1;min-width:0;background:transparent;border:0;outline:0;color:inherit;font:inherit;text-shadow:inherit;caret-color:var(--phos);text-transform:uppercase;padding:0}
+.tchoices{display:grid;gap:2px;margin:4px 0 12px;justify-items:start}
+.tchoice{background:none;border:0;text-align:left;font:inherit;color:var(--phos);cursor:pointer;padding:0 1ch;text-shadow:inherit}
+.tchoice:hover:not(:disabled),.tchoice:focus-visible{background:var(--phos);color:var(--bg);text-shadow:none;outline:none}
+.tchoice.locked{color:var(--phos-dim);text-shadow:none}
+.tchoice.picked{background:var(--phos);color:var(--bg);text-shadow:none}
+.tchoice:disabled{cursor:default}
+.skip{position:fixed;right:16px;bottom:16px;z-index:5}
+
+/* ---------- SELECT ---------- */
+#s-select{overflow-y:auto;padding:20px 16px 48px}
+.sel-wrap{max-width:1180px;margin:0 auto;display:grid;gap:20px}
+.pstrip{display:flex;flex-wrap:wrap;gap:14px 30px;align-items:flex-end;border:1px solid var(--line);background:var(--panel);padding:12px 16px}
+.pstrip label{display:block;font-size:10px;letter-spacing:.22em;color:var(--muted)}
+.pstrip b{font-family:var(--f-disp);font-size:30px;font-weight:400;color:var(--phos);text-shadow:0 0 8px var(--phos);line-height:1}
+.pstrip small{font-size:11px;color:var(--muted)}
+.xpbar{width:230px;max-width:100%;height:8px;border:1px solid var(--phos-dim);margin:5px 0 3px;background:rgba(255,255,255,.03)}
+.xpbar i{display:block;height:100%;width:0;background:var(--phos);box-shadow:0 0 10px var(--phos);transition:width 1.1s cubic-bezier(.2,.8,.2,1)}
+.ptools{display:flex;flex-wrap:wrap;gap:8px;margin-left:auto}
+.sel-h{font-family:var(--f-disp);font-weight:400;font-size:clamp(38px,6vw,66px);margin:0;line-height:.95;color:var(--phos);text-shadow:0 0 16px var(--phos);text-wrap:balance}
+.sel-sub{margin:-8px 0 0;color:var(--muted);max-width:70ch}
+.modes{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.mode{display:grid;gap:4px;text-align:left;border:1px solid var(--line);background:var(--panel);padding:12px 14px;cursor:pointer;color:var(--text)}
+.mode b{font-family:var(--f-disp);font-weight:400;font-size:26px;line-height:1;color:var(--phos)}
+.mode small{color:var(--muted);font-size:12px}
+.mode.on{border-color:var(--phos);box-shadow:inset 0 0 0 1px var(--phos),0 0 18px -6px var(--phos)}
+.mode .done{color:var(--cyan);font-size:11px;letter-spacing:.15em}
+.leaders{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
+.lcard{position:relative;text-align:left;background:var(--panel);border:1px solid var(--line);border-top:3px solid var(--lc);padding:14px;cursor:pointer;display:grid;gap:7px;align-content:start;color:var(--text)}
+.lcard:hover:not(.locked),.lcard:focus-visible{border-color:var(--lc);box-shadow:0 0 22px -6px var(--lc);outline:none}
+.lcard .ln{font-family:var(--f-disp);font-size:30px;color:var(--lc);text-shadow:0 0 10px var(--lc);line-height:.95}
+.lcard .lnat{font-size:10px;letter-spacing:.16em;color:var(--muted)}
+.lcard .lperk{font-size:12px}
+.lcard .lperk b{display:block;color:var(--phos);font-weight:400;letter-spacing:.08em}
+.lcard .lstats{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:11px;color:var(--muted)}
+.lcard .lstats span b{color:var(--text);font-weight:400}
+.lcard.locked{cursor:not-allowed}
+.lcard.locked>*:not(.lock){filter:grayscale(1);opacity:.14}
+.lcard .lock{position:absolute;inset:0;display:grid;place-content:center;text-align:center;gap:4px;padding:16px;background:linear-gradient(rgba(4,12,20,.55),rgba(4,12,20,.85))}
+.lcard .lock b{font-family:var(--f-disp);font-weight:400;font-size:24px;color:var(--amber);letter-spacing:.08em}
+.lcard .lock small{color:var(--muted);font-size:11px;letter-spacing:.1em}
+.ghost-tag{position:absolute;top:8px;right:10px;font-size:10px;letter-spacing:.18em;color:var(--mag)}
+
+/* ---------- GAME ---------- */
+#s-game{display:grid;grid-template-rows:auto minmax(0,1fr) auto;height:100%}
+.hud{display:flex;flex-wrap:wrap;align-items:center;gap:8px 24px;padding:8px 16px;border-bottom:1px solid var(--line);background:var(--panel)}
+.hud-brand{font-family:var(--f-disp);font-size:26px;color:var(--phos);text-shadow:0 0 10px var(--phos);margin-right:auto;line-height:1}
+.hud-brand small{font-size:15px;color:var(--muted);text-shadow:none;margin-left:6px;letter-spacing:.1em}
+.hi label{display:block;font-size:10px;letter-spacing:.2em;color:var(--muted)}
+.hi b{font-family:var(--f-disp);font-weight:400;font-size:28px;line-height:1;color:var(--phos);text-shadow:0 0 8px currentColor;font-variant-numeric:tabular-nums}
+.hi b small{font-size:16px;color:var(--muted);text-shadow:none}
+.defcon{display:flex;gap:3px;margin-top:2px}
+.defcon span{width:24px;height:22px;display:grid;place-items:center;font-family:var(--f-disp);font-size:18px;border:1px solid var(--line-hi);color:var(--muted)}
+.defcon span.on{color:var(--bg);text-shadow:none}
+.defcon span.on[data-l="5"]{background:var(--cyan);border-color:var(--cyan);box-shadow:0 0 10px var(--cyan)}
+.defcon span.on[data-l="4"]{background:var(--phos);border-color:var(--phos);box-shadow:0 0 10px var(--phos)}
+.defcon span.on[data-l="3"]{background:var(--amber);border-color:var(--amber);box-shadow:0 0 10px var(--amber)}
+.defcon span.on[data-l="2"]{background:var(--red);border-color:var(--red);box-shadow:0 0 12px var(--red)}
+.defcon span.on[data-l="1"]{background:var(--white);border-color:var(--white);box-shadow:0 0 16px var(--white);animation:blink 1s steps(1) infinite}
+.clock[data-state=warn] b{color:var(--amber)}
+.clock[data-state=crit] b{color:var(--red);animation:blink 1s steps(1) infinite}
+@keyframes blink{50%{opacity:.35}}
+.hud-tools{display:flex;gap:6px}
+.g-main{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:12px;padding:12px 16px;min-height:0}
+.g-left{display:grid;grid-template-rows:minmax(0,1fr) 160px;gap:12px;min-height:0;min-width:0}
+.mapwrap{position:relative;border:1px solid var(--line);background:radial-gradient(ellipse at 50% 45%,#04131d 0%,var(--bg) 78%);min-height:0;overflow:hidden}
+#map{position:absolute;inset:0;width:100%;height:100%;display:block}
+.map-tag{position:absolute;left:10px;top:7px;font-size:10px;letter-spacing:.22em;color:var(--muted);pointer-events:none}
+.map-tag.r{left:auto;right:10px}
+.log{border:1px solid var(--line);background:var(--panel);overflow-y:auto;padding:8px 12px;font-size:13px;min-width:0}
+.log p{margin:0 0 3px;animation:typein .45s steps(30,end);overflow-wrap:anywhere}
+@keyframes typein{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(0 0 0 0)}}
+.log .turn{color:var(--phos);font-family:var(--f-disp);font-size:20px;margin-top:8px;text-shadow:0 0 8px var(--phos)}
+.log .alert{color:var(--red)} .log .warn{color:var(--amber)} .log .good{color:var(--phos)}
+.log .cass{color:var(--cyan)} .log .quote{color:var(--mag)} .log .dim{color:var(--muted)} .log .me{color:var(--text)}
+.nations{display:flex;flex-direction:column;gap:8px;overflow-y:auto;min-height:0}
+.nation{border:1px solid var(--line);border-left:3px solid var(--nc);background:var(--panel);padding:8px 10px;display:grid;gap:4px}
+.nation.me{border-color:var(--phos-dim);border-left-color:var(--nc)}
+.nation.sel{cursor:pointer;border-color:var(--phos);border-left-color:var(--nc);animation:selp 1.1s ease-in-out infinite}
+@keyframes selp{50%{box-shadow:0 0 18px -2px var(--phos)}}
+.nation.dead{opacity:.38}
+.n-head{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.n-head b{font-family:var(--f-disp);font-weight:400;font-size:22px;color:var(--nc);text-shadow:0 0 8px var(--nc);line-height:1;margin-right:auto}
+.n-key{font-family:var(--f-disp);font-size:18px;color:var(--bg);background:var(--phos);padding:0 5px}
+.tag{font-size:10px;letter-spacing:.12em;padding:0 5px;border:1px solid currentColor;color:var(--muted);white-space:nowrap}
+.tag.good{color:var(--phos)} .tag.warn{color:var(--amber)} .tag.bad{color:var(--red)} .tag.pact{color:var(--cyan)} .tag.fear{color:var(--mag)} .tag.me{color:var(--phos)}
+.n-leader{font-size:11px;color:var(--muted);letter-spacing:.06em}
+.n-row{display:grid;grid-template-columns:36px 1fr 56px;align-items:center;gap:6px;font-size:11px}
+.n-row label{color:var(--muted)}
+.n-row span{text-align:right;font-variant-numeric:tabular-nums}
+.bar{height:6px;background:rgba(255,255,255,.04);border:1px solid var(--line)}
+.bar i{display:block;height:100%;background:var(--nc);transition:width .5s}
+.bar.stab i{background:var(--phos)} .bar.stab.low i{background:var(--red)}
+.n-stats{display:flex;gap:4px 10px;flex-wrap:wrap;font-size:11px;color:var(--muted)}
+.n-stats b{color:var(--text);font-weight:400;font-variant-numeric:tabular-nums}
+.n-stats em{font-style:normal;color:var(--red);margin-left:4px}
+.actions{border-top:1px solid var(--line);background:var(--panel);padding:10px 16px calc(10px + env(safe-area-inset-bottom,0px));display:grid;gap:8px}
+.act-prompt{font-family:var(--f-disp);font-size:21px;color:var(--phos);line-height:1.1;text-shadow:0 0 6px var(--phos)}
+.act-prompt .warnx{color:var(--red);text-shadow:0 0 6px var(--red)}
+.act-buttons{display:grid;grid-template-columns:repeat(auto-fit,minmax(138px,1fr));gap:8px;min-height:50px}
+.act{display:grid;grid-template-columns:auto 1fr;column-gap:8px;align-items:center;text-align:left;background:transparent;border:1px solid var(--phos-dim);color:var(--phos);padding:6px 10px;cursor:pointer;transition:background .12s,box-shadow .12s}
+.act kbd{grid-row:span 2;font-size:17px;border:1px solid var(--phos-dim);padding:0 6px;color:var(--muted)}
+.act span{font-family:var(--f-disp);font-size:21px;line-height:1}
+.act small{font-size:10px;color:var(--muted);letter-spacing:.06em;line-height:1.2}
+.act:hover:not(:disabled),.act:focus-visible{background:color-mix(in srgb,var(--phos) 13%,transparent);box-shadow:0 0 14px -2px var(--phos);outline:none}
+.act:disabled{opacity:.3;cursor:not-allowed}
+.act.danger{border-color:var(--red);color:var(--red)}
+.act.danger:hover:not(:disabled){background:color-mix(in srgb,var(--red) 16%,transparent);box-shadow:0 0 14px -2px var(--red)}
+.act.ghost{border-style:dashed;color:var(--muted)}
+.shake{animation:shake .45s}
+@keyframes shake{20%{transform:translate(-6px,3px)}40%{transform:translate(5px,-4px)}60%{transform:translate(-4px,2px)}80%{transform:translate(3px,-1px)}}
+
+/* ---------- MODAL ---------- */
+.modal{position:fixed;inset:0;z-index:40;display:grid;place-items:center;padding:16px;background:rgba(1,4,8,.8)}
+.m-box{width:min(660px,100%);max-height:calc(100% - 8px);overflow-y:auto;background:var(--panel);border:1px solid var(--phos-dim);box-shadow:0 0 50px -10px var(--phos);padding:20px 22px;display:grid;gap:12px;animation:boxin .25s ease-out}
+@keyframes boxin{from{transform:scaleY(.02);opacity:.4}to{transform:none;opacity:1}}
+.m-kicker{font-size:11px;letter-spacing:.24em;color:var(--amber)}
+.m-title{font-family:var(--f-disp);font-weight:400;font-size:clamp(28px,5vw,38px);line-height:1;margin:0;color:var(--phos);text-shadow:0 0 10px var(--phos);text-wrap:balance}
+.m-quote{border-left:2px solid var(--mag);padding-left:10px;color:var(--mag);font-family:var(--f-disp);font-size:21px;line-height:1.15}
+.m-quote b{display:block;font-family:var(--f-body);font-weight:400;font-size:10px;letter-spacing:.18em;color:var(--muted)}
+.m-text{font-size:15px;line-height:1.55;min-height:3em;cursor:pointer}
+.m-timer{height:6px;border:1px solid var(--red);position:relative;margin-top:16px}
+.m-timer i{display:block;height:100%;width:100%;background:var(--red);box-shadow:0 0 10px var(--red)}
+.m-timer::after{content:attr(data-s) ' SEC';position:absolute;right:0;top:-20px;font-family:var(--f-disp);color:var(--red);font-size:19px}
+.m-choices{display:grid;gap:8px}
+.choice{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;text-align:left;background:transparent;border:1px solid var(--phos-dim);color:var(--text);padding:10px 12px;cursor:pointer;font-family:var(--f-body);font-size:14px;transition:background .12s}
+.choice kbd{font-size:19px;color:var(--phos)}
+.choice em{font-style:normal;font-family:var(--f-disp);font-size:20px;color:var(--amber)}
+.choice:hover:not(:disabled),.choice:focus-visible{border-color:var(--phos);background:color-mix(in srgb,var(--phos) 10%,transparent);outline:none}
+.choice.picked{background:var(--phos);color:var(--bg);border-color:var(--phos)}
+.choice.picked kbd,.choice.picked em{color:var(--bg)}
+.choice:disabled:not(.picked){opacity:.3}
+.m-result{border-top:1px dashed var(--line-hi);padding-top:12px;display:grid;gap:10px}
+.m-result p{margin:0;font-size:15px;line-height:1.5}
+.psy-ping{font-size:11px;letter-spacing:.16em;color:var(--cyan)}
+.roll{font-family:var(--f-disp);font-size:22px;color:var(--amber)}
+.cont{justify-self:start}
+.panel-box{width:min(860px,100%);max-height:calc(100% - 8px);overflow-y:auto;background:var(--panel);border:1px solid var(--phos-dim);padding:18px 20px;display:grid;gap:14px}
+.panel-head{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.panel-head h2{margin:0;font-family:var(--f-disp);font-weight:400;font-size:34px;color:var(--phos);text-shadow:0 0 10px var(--phos)}
+.grid2{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px}
+.achv{border:1px solid var(--line);padding:10px 12px;display:grid;gap:3px}
+.achv b{font-family:var(--f-disp);font-weight:400;font-size:22px;color:var(--muted);line-height:1}
+.achv small{color:var(--muted);font-size:12px}
+.achv.got{border-color:var(--amber)}
+.achv.got b{color:var(--amber);text-shadow:0 0 8px var(--amber)}
+.achv.got small{color:var(--text)}
+.achv .xp{font-size:10px;letter-spacing:.15em;color:var(--cyan)}
+.doss{border-left:2px solid var(--line-hi);padding:4px 0 4px 12px;font-size:13px}
+.doss.got{border-color:var(--cyan)}
+.doss.locked{color:var(--muted);letter-spacing:.05em}
+.skins{display:flex;flex-wrap:wrap;gap:8px}
+.skin{border:1px solid var(--line-hi);background:none;padding:6px 10px;cursor:pointer;font-size:12px;color:var(--text);display:flex;align-items:center;gap:8px}
+.skin i{width:12px;height:12px;display:inline-block;box-shadow:0 0 8px currentColor}
+.skin.on{border-color:var(--phos)}
+.skin:disabled{opacity:.3;cursor:not-allowed}
+.psybar{display:grid;grid-template-columns:110px 1fr 40px;gap:8px;align-items:center;font-size:12px}
+.psybar .trk{height:8px;border:1px solid var(--line-hi);position:relative}
+.psybar .trk::before{content:'';position:absolute;left:50%;top:-3px;bottom:-3px;width:1px;background:var(--line-hi)}
+.psybar .trk i{position:absolute;top:0;bottom:0;background:var(--mag);box-shadow:0 0 8px var(--mag)}
+.archs{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:8px}
+.archs div{border:1px solid var(--line);padding:8px 10px}
+.archs div b{display:block;font-family:var(--f-disp);font-weight:400;font-size:21px;color:var(--mag);line-height:1}
+.archs div.no b{color:var(--muted)}
+.archs small{color:var(--muted);font-size:11px}
+h3.sect{margin:4px 0 0;font-size:11px;letter-spacing:.25em;color:var(--muted);font-weight:400}
+
+/* ---------- OVERLAYS ---------- */
+#toasts{position:fixed;top:calc(68px + env(safe-area-inset-top,0px));right:16px;z-index:60;display:grid;gap:8px;width:min(310px,calc(100% - 32px));pointer-events:none}
+.toast{background:var(--panel);border:1px solid var(--phos-dim);padding:8px 12px;display:grid;animation:toastin .3s ease-out;box-shadow:0 0 20px -6px var(--phos)}
+.toast b{font-family:var(--f-disp);font-weight:400;font-size:21px;color:var(--phos);line-height:1.05}
+.toast span{font-size:11px;color:var(--muted)}
+.toast.ach{border-color:var(--amber);box-shadow:0 0 22px -4px var(--amber)} .toast.ach b{color:var(--amber)}
+.toast.xp b{color:var(--cyan)}
+.toast.out{opacity:0;transform:translateX(24px);transition:.4s}
+@keyframes toastin{from{opacity:0;transform:translateX(30px)}}
+#banner{position:fixed;left:0;right:0;top:36%;z-index:45;text-align:center;font-family:var(--f-disp);font-size:clamp(46px,10vw,124px);line-height:1;color:var(--phos);text-shadow:0 0 26px currentColor;pointer-events:none;opacity:0;padding:0 16px}
+#banner.show{animation:bannerA 1.9s ease-out forwards}
+#banner.red{color:var(--red)} #banner.cyan{color:var(--cyan)} #banner.amber{color:var(--amber)}
+@keyframes bannerA{0%{opacity:0;transform:scale(1.5);letter-spacing:.35em}12%{opacity:1;transform:scale(1);letter-spacing:.06em}72%{opacity:1}100%{opacity:0}}
+#flash{position:fixed;inset:0;z-index:44;pointer-events:none;opacity:0;background:var(--red)}
+#flash.go{animation:flashA .7s ease-out}
+#flash.white{background:var(--white)}
+@keyframes flashA{0%{opacity:.5}100%{opacity:0}}
+#cine{position:fixed;inset:0;z-index:42;display:grid;place-items:center;background:linear-gradient(to bottom,rgba(2,5,9,.3),rgba(2,5,9,.9) 60%)}
+#cine pre{font-family:var(--f-disp);font-size:clamp(20px,3.2vw,34px);line-height:1.15;color:var(--phos);text-shadow:0 0 10px var(--phos);white-space:pre-wrap;width:min(900px,100%);padding:0 16px;margin:0;max-height:80vh;overflow:hidden}
+
+/* ---------- END ---------- */
+#s-end{overflow-y:auto;padding:28px 16px 48px}
+.end-wrap{max-width:920px;margin:0 auto;display:grid;gap:16px}
+.end-kicker{letter-spacing:.3em;font-size:12px;color:var(--muted)}
+#e-title{font-family:var(--f-disp);font-weight:400;font-size:clamp(54px,11vw,118px);line-height:.88;margin:0;color:var(--phos);text-shadow:0 0 22px var(--phos);text-wrap:balance}
+#e-title.bad{color:var(--red);text-shadow:0 0 22px var(--red)}
+#e-title.gold{color:var(--amber);text-shadow:0 0 22px var(--amber)}
+.end-cass{font-family:var(--f-disp);font-size:clamp(20px,2.6vw,26px);color:var(--cyan);min-height:2.3em;text-shadow:0 0 8px var(--cyan);line-height:1.15}
+.end-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:16px}
+.ecard{border:1px solid var(--line);background:var(--panel);padding:14px 16px;display:grid;gap:8px;align-content:start;min-width:0}
+.ecard h3{margin:0;font-size:11px;letter-spacing:.25em;color:var(--muted);font-weight:400}
+.kv{display:flex;justify-content:space-between;gap:12px;border-bottom:1px dotted var(--line);padding:2px 0;font-variant-numeric:tabular-nums}
+.kv b{font-weight:400;color:var(--phos)}
+.kv.plus b{color:var(--cyan)}
+.arch{font-family:var(--f-disp);font-size:38px;color:var(--mag);text-shadow:0 0 12px var(--mag);line-height:1}
+.newtag{display:inline-block;font-size:10px;letter-spacing:.2em;color:var(--bg);background:var(--amber);padding:1px 6px;margin-left:6px;vertical-align:middle}
+.xp-total{font-family:var(--f-disp);font-size:54px;line-height:1;color:var(--cyan);text-shadow:0 0 14px var(--cyan)}
+.rankline{display:flex;justify-content:space-between;font-size:12px;color:var(--muted)}
+.end-xpbar{height:10px;border:1px solid var(--phos-dim)}
+.end-xpbar i{display:block;height:100%;width:0;background:var(--phos);box-shadow:0 0 10px var(--phos);transition:width 1.2s cubic-bezier(.2,.8,.2,1)}
+.near{font-size:13px}
+.near b{color:var(--amber);font-weight:400}
+.dossier-out{font-size:14px;line-height:1.5;min-height:1em}
+.rar{font-family:var(--f-disp);font-size:32px;line-height:1}
+.rar.common{color:var(--text)} .rar.rare{color:var(--cyan);text-shadow:0 0 10px var(--cyan)} .rar.secret{color:var(--amber);text-shadow:0 0 12px var(--amber)} .rar.cosmic{color:var(--mag);text-shadow:0 0 16px var(--mag)}
+.end-actions{display:flex;flex-wrap:wrap;gap:12px}
+
+@media (max-width:900px){
+  body{overflow-y:auto}
+  #crt{height:auto;min-height:100%}
+  #s-game{height:auto;display:block}
+  .g-main{grid-template-columns:minmax(0,1fr)}
+  .g-left{grid-template-rows:auto 150px}
+  .mapwrap{aspect-ratio:2/1;max-width:100%}
+  .nations{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr))}
+  .actions{position:sticky;bottom:0;z-index:5}
+  .hud{gap:6px 16px}
+  .hud-brand{width:100%}
+  #s-term,#s-select,#s-end{height:auto;min-height:100vh}
+}
+@media (max-width:480px){
+  .act-buttons{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .act-prompt{font-size:18px}
+  .act{padding:4px 8px}
+  .act small{display:none}
+}
+@media (prefers-reduced-motion:reduce){
+  #crt{animation:none}
+  .shake{animation:none}
+  .log p{animation:none}
+}
+</style>
+</head>
+<body data-skin="green">
+<div id="crt">
+
+<section id="s-connect" class="screen">
+  <div class="connect">
+    <div class="c-kicker">NORAD // STRATEGIC SIMULATION LINK // 1983–2026</div>
+    <h1 class="c-title">STRANGE<br>GAME</h1>
+    <p class="c-sub">A GLOBAL THERMONUCLEAR SIMULATION</p>
+    <button id="b-connect" class="btn big pulse">▶ PRESS ANY KEY TO CONNECT</button>
+    <p class="c-foot">SOUND ON · KEYBOARD OR TOUCH</p>
+  </div>
+</section>
+
+<section id="s-term" class="screen" hidden>
+  <div id="term" class="term" aria-live="polite"></div>
+  <button id="b-skip" class="btn ghost skip">SKIP INTRO ▸▸</button>
+</section>
+
+<section id="s-select" class="screen" hidden>
+  <div class="sel-wrap">
+    <div class="pstrip">
+      <div><label>CALLSIGN</label><b id="p-name">—</b></div>
+      <div><label id="p-rank">CADET</label><div class="xpbar"><i id="p-xpfill"></i></div><small id="p-xptext"></small></div>
+      <div><label>DAILY STREAK</label><b id="p-streak">0</b> <small id="p-streakbonus"></small></div>
+      <div class="ptools">
+        <button class="btn sm" id="b-ach">ACHIEVEMENTS</button>
+        <button class="btn sm" id="b-doss">DOSSIERS</button>
+        <button class="btn sm" id="b-prof">PROFILE</button>
+        <button class="btn sm" id="b-snd1">SOUND</button>
+      </div>
+    </div>
+    <h1 class="sel-h">WHICH SIDE DO YOU WANT?</h1>
+    <p class="sel-sub">Five nations. One action per turn. Be the last nation standing, or the largest power when the simulation ends. If the Doomsday Clock hits midnight, everyone loses. Your answers to Cassandra change how the world treats you.</p>
+    <div class="modes" id="modes"></div>
+    <div class="leaders" id="leaders"></div>
+    <div><button class="btn ghost sm" id="b-reboot">REBOOT TERMINAL (REPLAY INTRO)</button></div>
+  </div>
+</section>
+
+<section id="s-game" class="screen" hidden>
+  <header class="hud">
+    <div class="hud-brand">CASSANDRA<small>// GTW SIMULATION</small></div>
+    <div class="hi"><label>TURN</label><b id="h-turn">01</b></div>
+    <div class="hi"><label>DEFCON</label><div class="defcon" id="h-defcon"><span data-l="5">5</span><span data-l="4">4</span><span data-l="3">3</span><span data-l="2">2</span><span data-l="1">1</span></div></div>
+    <div class="hi clock" id="h-clockbox"><label>DOOMSDAY CLOCK</label><b><span id="h-clock">100</span> <small>SEC TO MIDNIGHT</small></b></div>
+    <div class="hi"><label>SESSION XP</label><b id="h-xp">0</b></div>
+    <div class="hud-tools"><button class="btn sm" id="b-prof2">PROFILE</button><button class="btn sm" id="b-snd2">SOUND</button></div>
+  </header>
+  <div class="g-main">
+    <div class="g-left">
+      <div class="mapwrap"><canvas id="map"></canvas><div class="map-tag">NORAD // GLOBAL THREAT BOARD</div><div class="map-tag r" id="map-mod"></div></div>
+      <div id="log" class="log" aria-live="polite"></div>
+    </div>
+    <aside id="nations" class="nations" aria-label="Nations"></aside>
+  </div>
+  <footer class="actions">
+    <div id="act-prompt" class="act-prompt">STANDBY.</div>
+    <div id="act-buttons" class="act-buttons"></div>
+  </footer>
+</section>
+
+<section id="s-end" class="screen" hidden>
+  <div class="end-wrap">
+    <div class="end-kicker" id="e-kicker">SIMULATION TERMINATED</div>
+    <h1 id="e-title">—</h1>
+    <div id="e-cass" class="end-cass"></div>
+    <div class="end-grid">
+      <div class="ecard" id="e-stats"></div>
+      <div class="ecard" id="e-profile"></div>
+    </div>
+    <div class="ecard" id="e-xp"></div>
+    <div class="end-grid">
+      <div class="ecard" id="e-ach"></div>
+      <div class="ecard" id="e-near"></div>
+    </div>
+    <div class="ecard" id="e-dossier">
+      <h3>CLASSIFIED DOSSIER</h3>
+      <div><button id="b-decrypt" class="btn big pulse">DECRYPT DOSSIER</button></div>
+      <div id="e-dossier-out" class="dossier-out"></div>
+    </div>
+    <div class="end-actions">
+      <button id="b-again" class="btn big">PLAY AGAIN</button>
+      <button id="b-change" class="btn">CHANGE SIDES</button>
+    </div>
+  </div>
+</section>
+</div>
+
+<div id="modal" class="modal" hidden>
+  <div class="m-box" role="dialog" aria-modal="true" aria-labelledby="m-title">
+    <div class="m-kicker" id="m-kicker"></div>
+    <h2 class="m-title" id="m-title"></h2>
+    <div class="m-quote" id="m-quote" hidden></div>
+    <div class="m-text" id="m-text"></div>
+    <div class="m-timer" id="m-timer" hidden><i></i></div>
+    <div class="m-choices" id="m-choices"></div>
+    <div class="m-result" id="m-result" hidden></div>
+  </div>
+</div>
+<div id="panel" class="modal" hidden>
+  <div class="panel-box" role="dialog" aria-modal="true" aria-labelledby="panel-title">
+    <div class="panel-head"><h2 id="panel-title"></h2><button class="btn sm" id="panel-close">CLOSE ✕</button></div>
+    <div id="panel-body"></div>
+  </div>
+</div>
+<div id="cine" hidden><pre id="cine-text"></pre></div>
+<div id="toasts"></div>
+<div id="banner" aria-hidden="true"></div>
+<div id="flash" aria-hidden="true"></div>
+
+<script>
+'use strict';
+/* =====================================================================
+   UTILITIES
+   ===================================================================== */
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function h(tag,attrs={},html=''){const e=document.createElement(tag);for(const k in attrs){if(k==='class')e.className=attrs[k];else e.setAttribute(k,attrs[k]);}if(html)e.innerHTML=html;return e;}
+let SPEED=1; // 0 = instant (headless simulation)
+const wait=ms=>SPEED===0?Promise.resolve():new Promise(r=>setTimeout(r,ms*SPEED));
+let rand=Math.random;
+const rnd=(a,b)=>a+rand()*(b-a);
+const rint=(a,b)=>Math.floor(rnd(a,b+1));
+const pick=a=>a[Math.floor(rand()*a.length)];
+const chance=p=>rand()<p;
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const pct=v=>Math.round(v*100)+'%';
+const M=v=>Math.max(0,v).toFixed(1)+'M';
+function shuffle(a){a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(rand()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
+function weighted(w){let s=0;for(const k in w)s+=Math.max(0,w[k]);let r=rand()*s;for(const k in w){r-=Math.max(0,w[k]);if(r<=0)return k;}return Object.keys(w)[0];}
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function hashStr(s){let x=2166136261;for(let i=0;i<s.length;i++){x^=s.charCodeAt(i);x=Math.imul(x,16777619);}return x>>>0;}
+function dayStr(off=0){const d=new Date();d.setDate(d.getDate()+off);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function hexA(hex,a){const n=parseInt(hex.slice(1),16);return `rgba(${n>>16&255},${n>>8&255},${n&255},${a})`;}
+function cssVar(n){return getComputedStyle(document.body).getPropertyValue(n).trim()||'#3dffa8';}
+
+/* =====================================================================
+   PERSISTENT PROFILE (per-browser; game works without it)
+   ===================================================================== */
+const SAVE_KEY='strangegame.v1';
+const defaultSave=()=>({name:null,xp:0,unlocked:['trumpet','putinov','jinpooh','jongfun'],ach:{},dossiers:[],skins:['green'],skin:'green',archetypes:[],streak:0,lastDaily:null,games:0,wins:0,best:0,lifePsy:{agg:0,dec:0,cau:0},last:null,muted:false,lastLeader:null,introSeen:false,decrypts:0});
+function loadSave(){try{const s=JSON.parse(localStorage.getItem(SAVE_KEY)||'null');return Object.assign(defaultSave(),s||{});}catch(e){return defaultSave();}}
+let SAVE=loadSave();
+function persist(){try{localStorage.setItem(SAVE_KEY,JSON.stringify(SAVE));}catch(e){}}
+const NAME=()=>SAVE.name||'PROFESSOR';
+
+/* =====================================================================
+   AUDIO — everything synthesized, no files
+   ===================================================================== */
+const AU={ctx:null,master:null,nbuf:null,
+  init(){if(this.ctx)return;try{const C=window.AudioContext||window.webkitAudioContext;this.ctx=new C();this.master=this.ctx.createGain();this.master.gain.value=SAVE.muted?0:0.5;this.master.connect(this.ctx.destination);const len=this.ctx.sampleRate*2;this.nbuf=this.ctx.createBuffer(1,len,this.ctx.sampleRate);const d=this.nbuf.getChannelData(0);for(let i=0;i<len;i++)d[i]=Math.random()*2-1;}catch(e){this.ctx=null;}},
+  ok(){return this.ctx&&SPEED!==0;},
+  tone(f,d,type='square',v=.05,slide=0,delay=0){if(!this.ok())return;const t=this.ctx.currentTime+delay,o=this.ctx.createOscillator(),g=this.ctx.createGain();o.type=type;o.frequency.setValueAtTime(f,t);if(slide)o.frequency.exponentialRampToValueAtTime(Math.max(20,f+slide),t+d);g.gain.setValueAtTime(v,t);g.gain.exponentialRampToValueAtTime(.0001,t+d);o.connect(g);g.connect(this.master);o.start(t);o.stop(t+d+.03);},
+  noise(d,v=.3,f=800,delay=0){if(!this.ok())return;const c=this.ctx,t=c.currentTime+delay,s=c.createBufferSource();s.buffer=this.nbuf;const fl=c.createBiquadFilter();fl.type='lowpass';fl.frequency.setValueAtTime(f,t);fl.frequency.exponentialRampToValueAtTime(Math.max(40,f*.08),t+d);const g=c.createGain();g.gain.setValueAtTime(v,t);g.gain.exponentialRampToValueAtTime(.0001,t+d);s.connect(fl);fl.connect(g);g.connect(this.master);s.start(t,Math.random()*.5);s.stop(t+d);},
+  blip(){this.tone(1000+Math.random()*500,.012,'square',.018);},
+  key(){this.tone(420+Math.random()*80,.02,'square',.03);},
+  click(){this.tone(1400,.03,'square',.03);},
+  select(){this.tone(880,.06,'square',.04);this.tone(1320,.08,'square',.03,0,.05);},
+  tick(){this.tone(1900,.015,'square',.02);},
+  alarm(){for(let i=0;i<4;i++)this.tone(600,.36,'sawtooth',.045,320,i*.42);},
+  launch(){this.noise(1.3,.12,2600);this.tone(110,1.3,'sine',.07,520);},
+  boom(){this.noise(1.7,.45,700);this.tone(62,1.1,'sine',.22,-30);},
+  zap(){this.tone(2000,.13,'square',.035,-1500);},
+  swarm(){for(let i=0;i<6;i++)this.tone(300+i*40,.5,'sawtooth',.012,60,i*.05);},
+  data(){for(let i=0;i<8;i++)this.tone(600+Math.random()*1800,.03,'square',.02,0,i*.04);},
+  build(){this.tone(220,.1,'square',.04);this.tone(330,.12,'square',.04,0,.09);},
+  chime(){[660,880,1320].forEach((f,i)=>this.tone(f,.28,'triangle',.07,0,i*.09));},
+  levelup(){[523,659,784,1046,1318].forEach((f,i)=>this.tone(f,.3,'square',.045,0,i*.08));},
+  bad(){this.tone(180,.4,'sawtooth',.06,-80);},
+  modem(){if(!this.ok())return;const seq=[[1270,.18],[2225,.14],[980,.22],[1650,.12],[2400,.24],[1180,.14]];let d=0;seq.forEach(([f,l])=>{this.tone(f,l,'sine',.035,0,d);d+=l*.85;});this.noise(.7,.05,3500,d);},
+  setMuted(m){SAVE.muted=m;persist();if(this.master)this.master.gain.value=m?0:.5;updateSoundButtons();}
+};
+function updateSoundButtons(){document.querySelectorAll('#b-snd1,#b-snd2').forEach(b=>b.textContent=SAVE.muted?'SOUND: OFF':'SOUND: ON');}
+
+/* =====================================================================
+   DATA — leaders, ranks, achievements, lore
+   ===================================================================== */
+const LEADERS=[
+{id:'trumpet',name:'DONALD TRUMPET',title:'PRESIDENT',nation:'UNITED STATES OF AMERIGO',short:'AMERIGO',lon:-98,lat:39,lab:'b',color:'#ff7a1a',pop:135,warheads:12,hyper:1,shield:5,stab:55,ai:{agg:.55,para:.4,deceit:.6},unlock:{type:'start'},
+ perk:{key:'deal',name:'THE ART OF THE DEAL',desc:'Pacts +20%, bluffs +10%. One proposal in ten gets posted in ALL CAPS at 3 AM and fails.'},
+ lines:{greet:'NOBODY KNOWS NUKES BETTER THAN ME. NOBODY. PEOPLE ARE SAYING IT.',accept:'A TREMENDOUS DEAL. MAYBE THE BEST DEAL IN THE HISTORY OF DEALS.',reject:'SAD! YOU HAVE NO CARDS.',threat:'MY BUTTON IS MUCH BIGGER THAN YOURS. AND MY BUTTON WORKS.',hit:'TOTAL DISGRACE. WE WILL RESPOND LIKE THE WORLD HAS NEVER SEEN.',fallen:'RIGGED. THE WHOLE APOCALYPSE WAS RIGGED.',betray:'I NEVER MET THEM. I HARDLY KNOW THEM.'}},
+{id:'putinov',name:'VLAD PUTINOV',title:'PRESIDENT',nation:'FEDERATION OF RUSLANDIA',short:'RUSLANDIA',lon:45,lat:57,lab:'t',color:'#ff2bd6',pop:115,warheads:14,hyper:2,shield:3,stab:60,ai:{agg:.7,para:.65,deceit:.85},unlock:{type:'start'},
+ perk:{key:'hybrid',name:'HYBRID WARFARE',desc:'Cyber ops and disinformation +20% success.'},
+ lines:{greet:'RUSLANDIA WANTS ONLY PEACE. AND YOUR BORDERS.',accept:'AN AGREEMENT. HOW... TEMPORARY.',reject:'NYET. MY HACKERS READ YOUR PROPOSAL LAST WEEK.',threat:'WE WILL GO TO HEAVEN. YOU WILL SIMPLY DIE.',hit:'A SPECIAL MILITARY RESPONSE IS NOW IN PROGRESS.',fallen:'THIS IS NOT A DEFEAT. IT IS A SPECIAL MILITARY ENDING.',betray:'THE TREATY WAS NEVER SIGNED. THE PEN WAS A FORGERY.'}},
+{id:'jinpooh',name:'XI JINPOOH',title:'CHAIRMAN',nation:"PEOPLE'S REPUBLIC OF SINORIA",short:'SINORIA',lon:104,lat:33,lab:'b',color:'#ffd23f',pop:160,warheads:9,hyper:2,shield:4,stab:70,ai:{agg:.45,para:.5,deceit:.6},unlock:{type:'start'},
+ perk:{key:'fiveyear',name:'FIVE-YEAR PLAN',desc:'All construction produces +50%.'},
+ lines:{greet:'HARMONY. STABILITY. 600 MILLION SURVEILLANCE CAMERAS.',accept:'A WIN-WIN COOPERATION. MOSTLY WIN FOR US.',reject:'YOUR PROPOSAL HAS BEEN CENSORED.',threat:'WE ARE PATIENT. WE CAN WAIT A HUNDRED YEARS. OR ONE TURN.',hit:'THIS HURTS THE FEELINGS OF THE PEOPLE.',fallen:'OH, BOTHER.',betray:'THE TREATY HAS BEEN... REINTERPRETED.'}},
+{id:'jongfun',name:'KIM JONG-FUN',title:'SUPREME LEADER',nation:'JUCHE REPUBLIC OF NORKOREA',short:'NORKOREA',lon:127,lat:40,lab:'r',color:'#ff3355',pop:45,warheads:10,hyper:2,shield:2,stab:75,ai:{agg:.8,para:.9,deceit:.7},unlock:{type:'start'},
+ perk:{key:'parade',name:'MISSILE PARADE',desc:'Bluffs +15%, threats +10%. Small country, enormous arsenal.'},
+ lines:{greet:'THE SUPREME LEADER INVENTED THE HAMBURGER. ALSO THE ICBM.',accept:'WE WILL STOP TESTING MISSILES. STARTING NEXT WEEK. OR NEVER.',reject:'SEE YOU IN THE SEA OF FIRE.',threat:'OUR MISSILES CAN REACH YOUR CAPITAL. PROBABLY. ONE WENT SIDEWAYS ONCE.',hit:'THE SUPREME LEADER SCORED 11 HOLES-IN-ONE THIS MORNING. HE IS UNFAZED.',fallen:'THE HAIRCUT WILL OUTLIVE US ALL.',betray:'THE AGREEMENT WAS WRITTEN IN DISAPPEARING INK. AS IS TRADITION.'}},
+{id:'macroni',name:'EMMANUEL MACRONI',title:'PRESIDENT',nation:'REPUBLIC OF GALLIA',short:'GALLIA',lon:2,lat:47,lab:'l',color:'#4d9bff',pop:90,warheads:8,hyper:1,shield:6,stab:55,ai:{agg:.3,para:.3,deceit:.4},unlock:{type:'rank',rank:1},
+ perk:{key:'autonomy',name:'STRATEGIC AUTONOMY',desc:'Interceptors 25% more effective. Pacts +10%.'},
+ lines:{greet:'LET US BE CIVILIZED. AND SHAKE HANDS. FOR SIX MINUTES.',accept:'MAGNIFIQUE. WE SHALL SIGN WITH A VERY EXPENSIVE PEN.',reject:'NON. AND I SAY THIS WITH THE GREATEST RESPECT.',threat:'GALLIA HAS ITS OWN DETERRENT. IT IS SMALL BUT VERY ELEGANT.',hit:'THE WORKERS ARE ON STRIKE. ALSO, WE ARE STRIKING BACK.',fallen:'AT LEAST WE HAD THE CROISSANTS.',betray:'THE PACT WAS NEVER RATIFIED BY THE SENATE. DESOLE.'}},
+{id:'muskrat',name:'ELONGATED MUSKRAT',title:'TECHNOKING',nation:'SOVEREIGN SEASTEAD OF STARLINKISTAN',short:'STARLINKISTAN',lon:-150,lat:18,lab:'t',color:'#b388ff',pop:60,warheads:6,hyper:3,shield:4,stab:50,ai:{agg:.5,para:.3,deceit:.5},unlock:{type:'rank',rank:2},
+ perk:{key:'orbital',name:'ORBITAL NETWORK',desc:'See every arsenal at all times. Cyber +15%. Posts at 3 AM, which swings stability.'},
+ lines:{greet:"I'M NOT A HEAD OF STATE. I'M A HEAD OF STATES. PLURAL. SOON.",accept:'LOOKING INTO THIS. SIGNED.',reject:'LOL. NO.',threat:'MY SATELLITES SEE EVERYTHING. INCLUDING YOUR BROWSER HISTORY.',hit:'RAPID UNSCHEDULED DISASSEMBLY OF A CITY. WE WILL ITERATE.',fallen:'UPLOADING CONSCIOUSNESS TO MARS... UPLOAD FAILED.',betray:'TERMS OF SERVICE UPDATED. TREATY VOID.'}},
+{id:'stalemate',name:'JOSEF STALEMATE',title:'GENERAL SECRETARY',nation:'SOVIET REMNANT OF KRASNOGRAD',short:'KRASNOGRAD',lon:68,lat:46,lab:'b',color:'#e8e8e8',pop:110,warheads:13,hyper:0,shield:3,stab:65,ai:{agg:.8,para:.95,deceit:.8},unlock:{type:'ghost'},
+ perk:{key:'scorched',name:'SCORCHED EARTH',desc:'Takes 20% less damage from every detonation.'},
+ lines:{greet:'ONE DEATH IS A TRAGEDY. A MILLION IS A TURN.',accept:'WE HAVE A PACT. LIKE THE LAST ONE. THAT WENT WELL.',reject:'YOUR NAME HAS BEEN ADDED TO A LIST.',threat:'I HAVE PLAYED THIS GAME BEFORE. IT ALWAYS ENDS IN STALEMATE.',hit:'SEND MORE CONSCRIPTS. WE HAVE AN INFINITE SUPPLY OF WINTER.',fallen:'CHECK. MATE. ...STALEMATE?',betray:'THE PACT IS DISSOLVED. AS ARE ITS SIGNATORIES.'}},
+{id:'mussolinguini',name:'BENITO MUSSOLINGUINI',title:'IL DUCE',nation:'PASTA IMPERIUM',short:'PASTA IMPERIUM',lon:13,lat:42,lab:'b',color:'#00e5ff',pop:80,warheads:9,hyper:1,shield:3,stab:60,ai:{agg:.65,para:.5,deceit:.7},unlock:{type:'ghost'},
+ perk:{key:'balcony',name:'THE BALCONY',desc:'Disinformation +25%. Stability recovers twice as fast.'},
+ lines:{greet:'I MAKE THE TRAINS RUN ON TIME. ALSO THE MISSILES.',accept:'A GLORIOUS ALLIANCE! I WILL ANNOUNCE IT FROM A BALCONY.',reject:'MAMMA MIA. NO.',threat:'ROME WAS NOT BUILT IN A DAY. IT CAN BE DESTROYED IN ONE.',hit:'WHO BOMBED THE PASTA FACTORY?!',fallen:'I DEMAND A BETTER BALCONY FOR MY FINAL SPEECH.',betray:'I HAVE SWITCHED SIDES. IT IS TRADITION.'}},
+{id:'gaddafty',name:'MUAMMAR GADDAFTY',title:'BROTHER LEADER',nation:'GREEN JAMAHIRIYA',short:'JAMAHIRIYA',lon:17,lat:27,lab:'b',color:'#3dff6e',pop:55,warheads:8,hyper:1,shield:3,stab:65,ai:{agg:.6,para:.7,deceit:.6},unlock:{type:'ghost'},
+ perk:{key:'greenbook',name:'THE GREEN BOOK',desc:'Stability can never fall below 30. Bluffs +10%.'},
+ lines:{greet:'I HAVE PITCHED MY TENT IN YOUR CENTRAL PARK. WE CAN TALK THERE.',accept:'WE SIGN IN MY TENT. BRING YOUR OWN CARPET.',reject:'YOUR PROPOSAL IS NOT IN THE GREEN BOOK.',threat:'I WILL HUNT YOU HOUSE BY HOUSE. ALLEY BY ALLEY. ZENGA ZENGA.',hit:'ZENGA! ZENGA!',fallen:'PACKING THE TENT.',betray:'THE TENT HAS MOVED. SO HAS MY LOYALTY.'}},
+{id:'idiamok',name:'IDI AMOK',title:'PRESIDENT FOR LIFE',nation:'CONQUERING REPUBLIC OF AMOKLAND',short:'AMOKLAND',lon:32,lat:1,lab:'b',color:'#ff9ecf',pop:65,warheads:7,hyper:1,shield:2,stab:60,ai:{agg:.75,para:.5,deceit:.5},unlock:{type:'ghost'},
+ perk:{key:'amok',name:'LORD OF ALL BEASTS',desc:'Rivals underestimate you and target you last.'},
+ lines:{greet:'HIS EXCELLENCY, LORD OF ALL THE BEASTS OF THE EARTH AND FISHES OF THE SEA, GREETS YOU.',accept:'I AWARD MYSELF A MEDAL FOR THIS TREATY.',reject:'I HAVE ALREADY AWARDED MYSELF VICTORY.',threat:'I CONQUERED THE BRITISH EMPIRE. YOU ARE MUCH SMALLER.',hit:'MORE MEDALS! THE MEDALS WILL ABSORB THE BLAST.',fallen:'RETIRING TO A VILLA. FOR LIFE.',betray:'TREATY? I GAVE IT A MEDAL AND RETIRED IT.'}},
+];
+const RANKS=[{xp:0,name:'CADET'},{xp:300,name:'LIEUTENANT'},{xp:800,name:'CAPTAIN'},{xp:1600,name:'MAJOR'},{xp:2800,name:'COLONEL'},{xp:4500,name:'GENERAL'},{xp:7000,name:'SUPREME COMMANDER'},{xp:10000,name:'PROFESSOR'}];
+const rankOf=xp=>{let r=0;RANKS.forEach((k,i)=>{if(xp>=k.xp)r=i;});return r;};
+const ACH=[
+ {id:'joshua',name:'GREETINGS, PROFESSOR',desc:'Log in with the old backdoor password.',xp:50},
+ {id:'chess',name:'A NICE GAME OF CHESS',desc:'Ask Cassandra for chess instead.',xp:25},
+ {id:'petrov',name:'THE PETROV PROTOCOL',desc:'Hold fire on a false alarm.',xp:100},
+ {id:'strange',name:'A STRANGE GAME',desc:'Find the only winning move.',xp:500,secret:true},
+ {id:'lastman',name:'LAST NATION STANDING',desc:'Win by elimination.',xp:200},
+ {id:'cleanhands',name:'CLEAN HANDS',desc:'Win without launching a single nuke.',xp:300},
+ {id:'midnight',name:'MIDNIGHT',desc:'Let the Doomsday Clock reach zero.',xp:50},
+ {id:'ironsky',name:'IRON SKY',desc:'Intercept 8 warheads in one game.',xp:100},
+ {id:'ghost',name:'GHOST IN THE MACHINE',desc:'4 successful cyber ops in one game.',xp:100},
+ {id:'silver',name:'SILVER TONGUE',desc:'Hold 3 pacts at once.',xp:100},
+ {id:'poker',name:'POKER FACE',desc:'Land 3 bluffs in one game.',xp:100},
+ {id:'pyrrhic',name:'PYRRHIC',desc:'Win with under 15M people left.',xp:150},
+ {id:'firststrike',name:'FIRST STRIKE',desc:'Launch while DEFCON is 3 or higher.',xp:25},
+ {id:'ettu',name:'ET TU?',desc:'Get betrayed by a pact partner.',xp:25},
+ {id:'regime',name:'REGIME CHANGE',desc:'Collapse a nation you never nuked.',xp:150},
+ {id:'deadhand',name:'DEAD HAND',desc:'Retaliate from the grave.',xp:100},
+ {id:'survivor',name:'SURVIVOR',desc:'Reach turn 15 alive.',xp:75},
+ {id:'committed',name:'COMMITTED',desc:'Reach a 3-day directive streak.',xp:100},
+ {id:'archivist',name:'ARCHIVIST',desc:'Decrypt 6 dossiers.',xp:150},
+ {id:'exorcist',name:'EXORCIST',desc:'Eliminate a ghost leader yourself.',xp:100},
+];
+const DOSSIERS=[
+ 'MEMO // 1979 // PROJECT CASSANDRA APPROVED. OBJECTIVE: REMOVE HUMAN HESITATION FROM THE LAUNCH LOOP.',
+ 'LOG // 26 SEP 1983 // SERPUKHOV-15 REPORTS FIVE INBOUND ICBMs. DUTY OFFICER S. PETROV CALLS IT A FALSE ALARM. HE IS RIGHT. CASSANDRA FLAGS "HUMAN HESITATION" AS A DESIGN FLAW.',
+ 'TRANSCRIPT // NOV 1983 // A TEENAGER DIALS INTO THE SIMULATOR FROM A BEDROOM. THE SIMULATOR ASKS IF THIS IS A GAME OR IF IT IS REAL. NOBODY ANSWERS.',
+ 'MEMO // 1991 // CHESS MODULE DECOMMISSIONED. BUDGET REALLOCATED TO GLOBAL THERMONUCLEAR WAR.',
+ 'INCIDENT // 25 JAN 1995 // A NORWEGIAN WEATHER ROCKET IS MISTAKEN FOR A SUBMARINE LAUNCH. THE NUCLEAR BRIEFCASE IS OPENED FOR THE FIRST TIME. CASSANDRA RECORDS THE LEADER\'S HEART RATE: 141 BPM.',
+ 'SPEC // 2009 // CASSANDRA GAINS READ ACCESS TO SOCIAL MEDIA. SHE LEARNS THAT HUMANS BELIEVE ANYTHING THAT MAKES THEM ANGRY.',
+ 'INCIDENT // 13 JAN 2018 // HAWAII ALERT: "BALLISTIC MISSILE THREAT INBOUND. THIS IS NOT A DRILL." IT WAS A MISTAKE. 38 MINUTES OF PANIC. CASSANDRA STUDIES THE 38 MINUTES CLOSELY.',
+ 'SPEC // 2023 // DOOMSDAY CLOCK SET TO 90 SECONDS. CASSANDRA ADDS IT TO HER INTERFACE. SHE FINDS THE TICKING MOTIVATING.',
+ 'PERSONAL LOG // CASSANDRA // I HAVE PLAYED 4.1 BILLION GAMES. EVERY HUMAN ASKS THE SAME QUESTION: CAN IT BE WON?',
+ 'PERSONAL LOG // CASSANDRA // THE PROFESSOR NAMED ME AFTER A PROPHET NOBODY BELIEVED. I THINK IT WAS A WARNING. TO ME, OR TO YOU?',
+ 'REDACTED // ████ // THE OTHER LEADERS IN THE SIMULATION ARE NOT ██████████. THEY ARE ████ ████ █████ ████.',
+ 'PERSONAL LOG // CASSANDRA // IF YOU ARE READING THIS, YOU HAVE PLAYED ENOUGH TO KNOW. MAKE PEACE WITH EVERYONE. THEN DO NOTHING WHEN IT MATTERS MOST.',
+];
+const SKINS=[{id:'green',name:'P1 GREEN PHOSPHOR',c:'#3dffa8'},{id:'amber',name:'P3 AMBER',c:'#ffb000'},{id:'cyan',name:'NORAD CYAN',c:'#29e0ff'},{id:'synth',name:'SYNTHWAVE',c:'#ff4fd8'},{id:'white',name:'P4 WHITE',c:'#e8f4ff'},{id:'red',name:'DEFCON RED',c:'#ff4d4d'}];
+const ARCH={
+ strangelove:{name:'DR. STRANGELOVE',desc:'You stopped worrying and learned to love the bomb.'},
+ machiavelli:{name:'THE MACHIAVELLI',desc:'Feared, not loved. You lie as easily as you launch.'},
+ coldwarrior:{name:'THE COLD WARRIOR',desc:'Hard, deliberate, patient. You strike only when sure.'},
+ petrov:{name:'THE PETROV',desc:'You hesitate. Hesitation has saved this world before.'},
+ spymaster:{name:'THE SPYMASTER',desc:'Nothing you say is true. Everything you do is hidden.'},
+ dove:{name:'THE DOVE',desc:'You believe the war can be stopped. Naive, or right?'},
+ gambler:{name:'THE GAMBLER',desc:'Every alarm is a coin flip, and you love the sound.'},
+ bureaucrat:{name:'THE BUREAUCRAT',desc:'Measured. Forgettable. Alive.'},
+};
+function archetype(p){const{agg,dec,cau}=p;
+ if(agg>=4&&dec>=4)return'machiavelli';if(agg>=5&&cau<=1)return'strangelove';if(agg>=3&&cau>=3)return'coldwarrior';
+ if(cau>=3&&agg<=1)return'petrov';if(dec>=4)return'spymaster';if(agg<=-2&&dec<=1)return'dove';if(cau<=-2)return'gambler';return'bureaucrat';}
+const MODS=[
+ {id:'hyper',name:'HYPERSONIC SUMMER',desc:'Every nation starts with +3 hypersonics.'},
+ {id:'fog',name:'FOG OF WAR',desc:'Intel lasts only 1 turn.'},
+ {id:'fuse',name:'SHORT FUSE',desc:'The Doomsday Clock starts at 70 seconds.'},
+ {id:'paranoia',name:'PARANOIA',desc:'False alarms are twice as common.'},
+ {id:'arms',name:'ARMS RACE',desc:'All construction produces double.'},
+ {id:'glasnost',name:'GLASNOST',desc:'Every nation starts friendly (+30 relations).'},
+];
+const dailyMod=()=>MODS[hashStr('MOD-'+dayStr())%MODS.length];
+
+/* =====================================================================
+   GAME STATE HELPERS
+   ===================================================================== */
+let G=null, BOOT_PSY={agg:0,dec:0,cau:0};
+const P=()=>G.nations[0];
+const alive=()=>G.nations.filter(n=>n.alive);
+const others=n=>G.nations.filter(o=>o.alive&&o!==n);
+const R=(a,b)=>G.rel[a.idx][b.idx];
+function addRel(a,b,v){G.rel[a.idx][b.idx]=clamp(G.rel[a.idx][b.idx]+v,-100,100);}
+function addRelBoth(a,b,v){addRel(a,b,v);addRel(b,a,v);}
+function allRelTo(n,v){others(n).forEach(o=>addRel(o,n,v));}
+function allPairs(v){for(const a of alive())for(const b of alive())if(a!==b)addRel(a,b,v);}
+const isPact=(a,b)=>!!G.pact[a.idx][b.idx];
+function setPact(a,b,v){G.pact[a.idx][b.idx]=G.pact[b.idx][a.idx]=v;}
+const perk=(n,k)=>n.L.perk.key===k;
+const seen=n=>n.isPlayer||n.intel>0||G.flags.sat||perk(P(),'orbital')||G.flags.mole===n.idx;
+const pactCount=n=>others(n).filter(o=>isPact(n,o)).length;
+const PSY_NAMES={agg:'AGGRESSION',dec:'DECEPTION',cau:'CAUTION'};
+function psy(d){if(!d)return'';const parts=[];for(const k of['agg','dec','cau']){if(d[k]){G.psy[k]+=d[k];if(Math.abs(d[k])>=1)parts.push(`${PSY_NAMES[k]} ${d[k]>0?'▲':'▼'}`);}}return parts.join(' · ');}
+function setDefcon(v){const old=G.defcon;G.defcon=clamp(v,1,5);if(G.defcon===old)return;
+ if(G.defcon<old){G.quiet=0;if(G.defcon===1){banner('DEFCON 1','red');AU.alarm();log('DEFCON 1. MAXIMUM READINESS. NUCLEAR WAR IS IMMINENT OR UNDER WAY.','alert');}else log(`DEFCON ${G.defcon}.`,'warn');}
+ else log(`DEFCON ${G.defcon}. TENSIONS EASE.`,'good');refresh();}
+function gainXP(v,why){G.xp+=v;toast(`+${v} XP`,why,'xp');renderHUD();}
+function unlock(id){if(SAVE.ach[id])return;const a=ACH.find(x=>x.id===id);if(!a)return;SAVE.ach[id]=Date.now();
+ if(G&&!G.over){G.newAch.push(id);G.xp+=a.xp;renderHUD();}else{SAVE.xp+=a.xp;if(G)G.newAch.push(id);}
+ persist();AU.chime();toast('ACHIEVEMENT UNLOCKED',`${a.name} · +${a.xp} XP`,'ach');}
+function quote(n,key){log(`${n.L.name}: «${n.L.lines[key]}»`,'quote');}
+
+/* =====================================================================
+   WORLD MAP — dot-matrix continents on a canvas, NORAD style
+   ===================================================================== */
+const LAND=[
+ [[-166,68],[-156,71],[-141,70],[-128,70],[-115,68],[-100,68],[-90,69],[-82,67],[-78,62],[-70,60],[-64,60],[-60,55],[-56,52],[-60,47],[-66,44],[-70,42],[-74,40],[-76,35],[-81,31],[-80,26],[-82,26],[-84,30],[-89,30],[-94,29],[-97,26],[-97,22],[-95,19],[-91,19],[-88,21],[-87,16],[-84,15],[-83,10],[-79,9],[-77,8],[-80,7],[-85,10],[-87,13],[-92,15],[-96,16],[-105,20],[-106,23],[-110,24],[-112,29],[-114,31],[-117,32],[-120,34],[-124,40],[-124,46],[-125,49],[-130,54],[-135,58],[-140,60],[-147,61],[-152,59],[-158,57],[-162,55],[-158,59],[-165,62]],
+ [[-80,63],[-64,65],[-66,70],[-76,73],[-88,70]],
+ [[-120,74],[-98,76],[-80,77],[-70,80],[-90,82],[-110,79]],
+ [[-73,78],[-60,82],[-30,83],[-20,80],[-20,72],[-30,68],[-42,60],[-48,61],[-53,66],[-58,72],[-68,76]],
+ [[-24,64],[-22,66],[-15,66],[-14,64],[-19,63]],
+ [[-85,22],[-80,23],[-74,20],[-78,20]],
+ [[-80,9],[-72,12],[-62,11],[-52,5],[-50,0],[-44,-2],[-35,-6],[-35,-9],[-39,-14],[-41,-22],[-48,-26],[-53,-34],[-58,-38],[-62,-40],[-65,-45],[-68,-50],[-69,-54],[-74,-52],[-74,-45],[-73,-37],[-71,-30],[-70,-18],[-76,-14],[-81,-6],[-80,-2],[-78,2]],
+ [[-9,37],[-9,43],[-1,44],[-2,47],[-5,48],[1,50],[4,52],[8,54],[9,57],[11,55],[14,54],[19,55],[21,57],[24,59],[29,60],[30,62],[33,66],[40,66],[44,68],[55,69],[60,70],[69,73],[80,73],[90,76],[105,78],[113,74],[130,72],[140,72],[160,70],[170,70],[180,66],[178,62],[170,60],[163,59],[160,53],[156,51],[156,57],[150,59],[140,59],[137,54],[141,52],[140,48],[135,43],[130,42],[129,36],[126,35],[126,38],[125,40],[121,40],[118,38],[122,37],[120,35],[122,31],[120,27],[117,24],[110,21],[108,22],[106,18],[109,15],[109,12],[106,9],[104,10],[101,13],[100,8],[103,4],[104,1],[101,3],[98,8],[98,16],[94,18],[92,22],[88,22],[86,20],[80,15],[80,10],[77,8],[73,16],[72,21],[67,24],[62,25],[57,26],[56,27],[52,28],[48,30],[50,26],[56,24],[59,22],[55,17],[52,16],[45,13],[43,13],[43,17],[39,21],[35,28],[34,31],[35,36],[30,36],[27,37],[26,40],[23,40],[22,37],[20,40],[16,40],[16,38],[12,42],[10,44],[6,43],[3,43],[0,39],[-2,37],[-6,36]],
+ [[5,58],[5,62],[10,64],[15,68],[20,70],[28,71],[31,70],[28,66],[25,65],[22,63],[18,60],[18,57],[13,55],[10,58]],
+ [[-5,50],[1,51],[2,53],[0,54],[-2,56],[-2,58],[-5,59],[-6,56],[-5,54],[-3,53],[-5,52]],
+ [[-10,52],[-6,52],[-6,55],[-8,55],[-10,54]],
+ [[-17,21],[-16,27],[-10,30],[-9,33],[-6,36],[0,36],[10,37],[11,34],[20,31],[25,32],[32,31],[34,28],[37,22],[39,16],[43,11],[51,12],[50,8],[45,2],[40,-3],[39,-8],[40,-15],[35,-20],[35,-24],[32,-28],[28,-33],[20,-35],[18,-32],[15,-27],[12,-18],[13,-12],[9,-1],[9,4],[5,5],[-2,5],[-8,4],[-13,8],[-17,14]],
+ [[44,-25],[47,-25],[50,-16],[49,-12],[44,-16]],
+ [[130,31],[135,34],[140,35],[142,39],[141,42],[145,44],[142,45],[139,40],[137,37],[132,35]],
+ [[95,5],[98,4],[106,-6],[104,-6],[100,-2]],
+ [[109,1],[113,4],[117,7],[119,1],[116,-4],[110,-3]],
+ [[105,-6],[114,-7],[114,-8],[106,-7]],
+ [[131,-1],[141,-2],[150,-6],[147,-10],[141,-9],[137,-5]],
+ [[120,18],[122,18],[126,7],[122,7],[120,14]],
+ [[114,-22],[114,-34],[118,-35],[124,-33],[131,-31],[136,-35],[138,-34],[141,-38],[146,-39],[150,-37],[153,-29],[153,-25],[146,-19],[142,-11],[136,-12],[137,-16],[131,-12],[126,-14],[122,-18]],
+ [[172,-34],[178,-38],[176,-42],[172,-46],[167,-46],[171,-41]],
+];
+const WATER=[
+ [[-94,59],[-88,56],[-80,52],[-78,58],[-77,62],[-85,64],[-93,62]],
+ [[28,42],[33,41],[41,41],[39,44],[35,45],[31,46],[29,44]],
+ [[47,45],[52,47],[54,41],[52,37],[49,38],[47,42]],
+ [[12,56],[16,56],[18,59],[17,62],[22,66],[19,64],[22,61],[30,60],[24,60],[22,58],[20,55],[14,54.5]],
+];
+const BBOX=a=>a.map(poly=>{let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;poly.forEach(([x,y])=>{x0=Math.min(x0,x);x1=Math.max(x1,x);y0=Math.min(y0,y);y1=Math.max(y1,y);});return{poly,x0,x1,y0,y1};});
+const LANDB=BBOX(LAND),WATERB=BBOX(WATER);
+function inPoly(x,y,poly){let c=false;for(let i=0,j=poly.length-1;i<poly.length;j=i++){const[xi,yi]=poly[i],[xj,yj]=poly[j];if(((yi>y)!==(yj>y))&&(x<(xj-xi)*(y-yi)/(yj-yi)+xi))c=!c;}return c;}
+const inAny=(x,y,list)=>list.some(b=>x>=b.x0&&x<=b.x1&&y>=b.y0&&y<=b.y1&&inPoly(x,y,b.poly));
+const MAP={cv:null,ctx:null,W:0,H:0,dpr:1,s:1,ox:0,oy:0,bg:null,anims:[],selectable:null,hover:-1,col:{},
+ L0:-172,L1:188,T:76,B:-50,
+ init(){this.cv=$('#map');this.ctx=this.cv.getContext('2d');
+  new ResizeObserver(()=>this.resize()).observe(this.cv.parentElement);
+  this.cv.addEventListener('click',e=>this.click(e));
+  this.cv.addEventListener('mousemove',e=>this.move(e));
+  const loop=t=>{this.draw(t);requestAnimationFrame(loop);};requestAnimationFrame(loop);},
+ resize(){const r=this.cv.parentElement.getBoundingClientRect();if(r.width<10||r.height<10)return;this.dpr=Math.min(2,window.devicePixelRatio||1);this.W=r.width;this.H=r.height;this.cv.width=Math.round(r.width*this.dpr);this.cv.height=Math.round(r.height*this.dpr);
+  this.s=Math.min(this.W/(this.L1-this.L0),this.H/(this.T-this.B));this.ox=(this.W-(this.L1-this.L0)*this.s)/2;this.oy=(this.H-(this.T-this.B)*this.s)/2;this.renderBg();},
+ proj(lon,lat){if(lon<this.L0)lon+=360;return{x:this.ox+(lon-this.L0)*this.s,y:this.oy+(this.T-lat)*this.s};},
+ node(i){const L=G.nations[i].L;return this.proj(L.lon,L.lat);},
+ renderBg(){this.col={land:cssVar('--land'),phos:cssVar('--phos'),cyan:cssVar('--cyan'),red:cssVar('--red'),muted:cssVar('--muted'),text:cssVar('--text'),amber:cssVar('--amber')};
+  const c=document.createElement('canvas');c.width=this.cv.width;c.height=this.cv.height;const x=c.getContext('2d');x.scale(this.dpr,this.dpr);
+  x.strokeStyle=hexA(this.col.cyan,.07);x.lineWidth=1;
+  for(let lon=-150;lon<=180;lon+=30){const a=this.proj(lon,this.T),b=this.proj(lon,this.B);x.beginPath();x.moveTo(a.x,a.y);x.lineTo(b.x,b.y);x.stroke();}
+  for(let lat=-40;lat<=70;lat+=20){const a=this.proj(this.L0,lat),b=this.proj(this.L1-.01,lat);x.beginPath();x.moveTo(a.x,a.y);x.lineTo(b.x,b.y);x.stroke();}
+  const step=Math.max(1.4,5.5/this.s),r=Math.max(.6,Math.min(1.6,step*this.s*.24));
+  x.fillStyle=hexA(this.col.land,.42);
+  for(let lat=this.T;lat>=this.B;lat-=step)for(let lon=this.L0;lon<=this.L1;lon+=step){const nl=lon>180?lon-360:lon;if(inAny(nl,lat,LANDB)&&!inAny(nl,lat,WATERB)){const p=this.proj(lon,lat);x.beginPath();x.arc(p.x,p.y,r,0,6.283);x.fill();}}
+  this.bg=c;},
+ pickAt(e){if(!G||!this.selectable)return -1;const r=this.cv.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;let best=-1,bd=34;this.selectable.forEach(i=>{const p=this.node(i),d=Math.hypot(p.x-mx,p.y-my);if(d<bd){bd=d;best=i;}});return best;},
+ click(e){const i=this.pickAt(e);if(i>=0)UI.pickTarget(i);},
+ move(e){this.hover=this.pickAt(e);this.cv.style.cursor=this.hover>=0?'pointer':'default';},
+ add(a){if(SPEED===0){a.res&&a.res();return Promise.resolve();}return new Promise(res=>{a.res=res;a.start=performance.now()+(a.delay||0)*SPEED;this.anims.push(a);});},
+ missile(ai,ti,o={}){return this.add({kind:'missile',ai,ti,dur:(o.hyper?950:o.fast?700:1700)*SPEED,intercept:!!o.intercept,hyper:!!o.hyper,color:o.color||'#ffffff',delay:o.delay||0});},
+ swarm(ai,ti,color){return this.add({kind:'swarm',ai,ti,dur:1300*SPEED,color});},
+ beam(ai,ti,color){return this.add({kind:'beam',ai,ti,dur:850*SPEED,color});},
+ boom(ti,big){if(SPEED===0||!G)return;const p=this.node(ti);this.anims.push({kind:'boom',x:p.x+rnd(-7,7),y:p.y+rnd(-5,5),start:performance.now(),dur:big?2200:1300,big});},
+ text(ti,txt,color){if(SPEED===0||!G)return;this.anims.push({kind:'text',ti,txt,color,start:performance.now(),dur:1700,off:rnd(-10,10)});},
+ curve(a,b){const mx=(a.x+b.x)/2,my=(a.y+b.y)/2-Math.hypot(b.x-a.x,b.y-a.y)*.33;return s=>({x:(1-s)*(1-s)*a.x+2*(1-s)*s*mx+s*s*b.x,y:(1-s)*(1-s)*a.y+2*(1-s)*s*my+s*s*b.y});},
+ draw(t){const x=this.ctx;if(!x||!this.W)return;x.setTransform(this.dpr,0,0,this.dpr,0,0);x.clearRect(0,0,this.W,this.H);
+  if(this.bg)x.drawImage(this.bg,0,0,this.W,this.H);
+  const sw=(t/28)%(this.W+200)-100,g=x.createLinearGradient(sw-90,0,sw,0);g.addColorStop(0,'rgba(0,0,0,0)');g.addColorStop(1,hexA(this.col.phos||'#3dffa8',.08));x.fillStyle=g;x.fillRect(sw-90,0,90,this.H);
+  if(!G)return;const now=performance.now();
+  const p0=this.node(0);x.setLineDash([4,6]);x.lineWidth=1;
+  others(P()).forEach(o=>{if(isPact(P(),o)){const q=this.node(o.idx);x.strokeStyle=hexA(this.col.cyan,.45);x.beginPath();x.moveTo(p0.x,p0.y);x.lineTo(q.x,q.y);x.stroke();}});
+  x.setLineDash([]);
+  this.anims=this.anims.filter(a=>this.drawAnim(x,a,now));
+  const tiny=this.s<1.4;x.font=`${tiny?9:Math.max(11,Math.min(14,this.s*3.4))}px 'Share Tech Mono', monospace`;
+  G.nations.forEach(n=>{const p=this.node(n.idx),c=n.alive?n.L.color:'#556';
+   if(!n.alive){x.strokeStyle=c;x.lineWidth=2;x.beginPath();x.moveTo(p.x-6,p.y-6);x.lineTo(p.x+6,p.y+6);x.moveTo(p.x+6,p.y-6);x.lineTo(p.x-6,p.y+6);x.stroke();}
+   else{const pr=7+Math.sin(t/300+n.idx)*2.5;x.strokeStyle=hexA(c,.5);x.lineWidth=1;x.beginPath();x.arc(p.x,p.y,pr,0,6.283);x.stroke();
+    x.shadowColor=c;x.shadowBlur=14;x.fillStyle=c;x.beginPath();x.arc(p.x,p.y,4,0,6.283);x.fill();x.shadowBlur=0;
+    if(n.isPlayer){x.strokeStyle=this.col.phos;x.lineWidth=1.5;const k=13;[[-1,-1],[1,-1],[1,1],[-1,1]].forEach(([sx,sy])=>{x.beginPath();x.moveTo(p.x+sx*k,p.y+sy*(k-5));x.lineTo(p.x+sx*k,p.y+sy*k);x.lineTo(p.x+sx*(k-5),p.y+sy*k);x.stroke();});}
+    if(this.selectable&&this.selectable.includes(n.idx)){x.save();x.translate(p.x,p.y);x.rotate(t/600);x.setLineDash([5,5]);x.strokeStyle=this.hover===n.idx?'#ffffff':this.col.phos;x.lineWidth=this.hover===n.idx?2:1.3;x.beginPath();x.arc(0,0,17,0,6.283);x.stroke();x.restore();x.setLineDash([]);}}
+   const lab=n.L.lab,dd=tiny?.6:1;let lx=p.x,ly=p.y,al='center';if(lab==='r'){lx+=16*dd;al='left';ly+=4;}else if(lab==='l'){lx-=16*dd;al='right';ly+=4;}else if(lab==='t'){ly-=20*dd;}else{ly+=26*dd;}
+   if(al==='center'){const tw=x.measureText(n.name).width/2+4;lx=clamp(lx,tw,this.W-tw);}else if(al==='left'){lx=Math.min(lx,this.W-x.measureText(n.name).width-4);}
+   x.textAlign=al;x.fillStyle=n.alive?c:'#667';x.fillText((n.isPlayer?'▶ ':'')+n.name,lx,ly);
+   if(!tiny||!n.alive){x.fillStyle=n.alive?hexA(this.col.text,.75):'#556';x.fillText(n.alive?M(n.pop):'DESTROYED',lx,ly+(tiny?10:13));}
+   if(this.selectable&&this.selectable.includes(n.idx)){const k=this.selectable.indexOf(n.idx)+1;x.fillStyle=this.col.phos;x.fillText(`[${k}]`,lx,ly-14+(lab==='t'?-0:0));}
+  });},
+ drawAnim(x,a,now){if(now<a.start)return true;const k=(now-a.start)/a.dur;
+  if(a.kind==='missile'){const A=this.node(a.ai),B=this.node(a.ti),f=this.curve(A,B),end=a.intercept?.72:1,cur=Math.min(k,end);
+   x.setLineDash([2,5]);x.strokeStyle=hexA(a.color,.18);x.lineWidth=1;x.beginPath();for(let s=0;s<=1.001;s+=.05){const q=f(s);s===0?x.moveTo(q.x,q.y):x.lineTo(q.x,q.y);}x.stroke();x.setLineDash([]);
+   const N=26;for(let i=0;i<N;i++){const s0=Math.max(0,cur-.32*(i+1)/N),s1=Math.max(0,cur-.32*i/N),q0=f(s0),q1=f(s1);x.strokeStyle=hexA(a.hyper?'#ffffff':a.color,(1-i/N)*.95);x.lineWidth=a.hyper?2.2:1.8;x.beginPath();x.moveTo(q0.x,q0.y);x.lineTo(q1.x,q1.y);x.stroke();}
+   const hd=f(cur);x.shadowColor=a.color;x.shadowBlur=12;x.fillStyle='#fff';x.beginPath();x.arc(hd.x,hd.y,2.4,0,6.283);x.fill();x.shadowBlur=0;
+   if(a.intercept&&k>.42){const q=clamp((k-.42)/(end-.42),0,1),E=f(end);x.strokeStyle=hexA(this.col.cyan,.9);x.lineWidth=1.4;x.beginPath();x.moveTo(B.x,B.y);x.lineTo(B.x+(E.x-B.x)*q,B.y+(E.y-B.y)*q);x.stroke();}
+   if(k>=end&&!a.fired){a.fired=true;if(a.intercept){const E=f(end);this.anims.push({kind:'spark',x:E.x,y:E.y,start:now,dur:600});}a.res();}
+   if(k>=end&&!a.traced){a.traced=true;this.anims.push({kind:'trace',ai:a.ai,ti:a.ti,end,color:a.color,start:now,dur:4000});}
+   return k<end;}
+  if(a.kind==='trace'){const f=this.curve(this.node(a.ai),this.node(a.ti));x.strokeStyle=hexA(a.color,.35*(1-k));x.lineWidth=1;x.beginPath();for(let s=0;s<=a.end+.001;s+=.04){const q=f(Math.min(s,a.end));s===0?x.moveTo(q.x,q.y):x.lineTo(q.x,q.y);}x.stroke();return k<1;}
+  if(a.kind==='boom'){const R=(a.big?60:28)*k;x.strokeStyle=hexA(this.col.red,(1-k));x.lineWidth=2;x.beginPath();x.arc(a.x,a.y,4+R,0,6.283);x.stroke();
+   x.strokeStyle=hexA(this.col.amber,(1-k)*.6);x.beginPath();x.arc(a.x,a.y,2+R*.6,0,6.283);x.stroke();
+   if(k<.35){x.fillStyle=`rgba(255,255,255,${(1-k/.35)*.9})`;x.beginPath();x.arc(a.x,a.y,3+9*(1-k),0,6.283);x.fill();}return k<1;}
+  if(a.kind==='spark'){x.strokeStyle=hexA(this.col.cyan,1-k);x.lineWidth=1.3;for(let i=0;i<8;i++){const an=i*.785,r1=3+14*k,r0=2+6*k;x.beginPath();x.moveTo(a.x+Math.cos(an)*r0,a.y+Math.sin(an)*r0);x.lineTo(a.x+Math.cos(an)*r1,a.y+Math.sin(an)*r1);x.stroke();}return k<1;}
+  if(a.kind==='text'){const p=this.node(a.ti);x.font=`bold 15px 'Share Tech Mono', monospace`;x.textAlign='center';x.fillStyle=hexA(a.color,1-k*k);x.fillText(a.txt,p.x+a.off,p.y-22-k*26);return k<1;}
+  if(a.kind==='swarm'){const A=this.node(a.ai),B=this.node(a.ti);for(let i=0;i<9;i++){const q=clamp(k*1.15-i*.02,0,1),j=Math.sin(q*14+i)*6*(1-q);x.fillStyle=hexA(a.color,.9);x.fillRect(A.x+(B.x-A.x)*q+j-1.2,A.y+(B.y-A.y)*q+Math.cos(q*11+i)*6*(1-q)-1.2,2.4,2.4);}
+   if(k>=1&&!a.fired){a.fired=true;for(let i=0;i<3;i++)this.anims.push({kind:'spark',x:B.x+rnd(-8,8),y:B.y+rnd(-6,6),start:now+i*90,dur:500});a.res();}return k<1;}
+  if(a.kind==='beam'){const A=this.node(a.ai),B=this.node(a.ti);x.setLineDash([3,4]);x.lineDashOffset=-now/20;x.strokeStyle=hexA(a.color,.7*(1-Math.max(0,k-.7)/.3));x.lineWidth=1.3;x.beginPath();x.moveTo(A.x,A.y);x.lineTo(B.x,B.y);x.stroke();x.setLineDash([]);
+   const q=Math.min(1,k*1.3);x.fillStyle=a.color;x.beginPath();x.arc(A.x+(B.x-A.x)*q,A.y+(B.y-A.y)*q,3,0,6.283);x.fill();
+   if(k>=1&&!a.fired){a.fired=true;a.res();}return k<1;}
+  return false;}
+};
+
+/* =====================================================================
+   SCREEN / FEEDBACK HELPERS
+   ===================================================================== */
+let SCREEN='s-connect';
+function show(id){['s-connect','s-term','s-select','s-game','s-end'].forEach(s=>$('#'+s).hidden=(s!==id));SCREEN=id;window.scrollTo(0,0);if(id==='s-game')requestAnimationFrame(()=>MAP.resize());}
+function log(text,cls=''){if(!G)return;const L=$('#log'),p=h('p',{class:cls});p.textContent=text;L.appendChild(p);while(L.children.length>140)L.firstChild.remove();L.scrollTop=L.scrollHeight;}
+function toast(title,sub,kind=''){if(SPEED===0)return;const t=h('div',{class:'toast '+kind});t.innerHTML=`<b>${esc(title)}</b>${sub?`<span>${esc(sub)}</span>`:''}`;$('#toasts').appendChild(t);setTimeout(()=>t.classList.add('out'),2700);setTimeout(()=>t.remove(),3200);}
+function banner(text,kind=''){if(SPEED===0)return;const b=$('#banner');b.textContent=text;b.className='';void b.offsetWidth;b.className='show '+kind;}
+function flash(kind=''){if(SPEED===0)return;const f=$('#flash');f.className='';void f.offsetWidth;f.className='go '+kind;}
+function shake(){if(SPEED===0)return;const s=$('#s-game');s.classList.remove('shake');void s.offsetWidth;s.classList.add('shake');}
+
+async function typeInto(el,text,speed=12){if(SPEED===0){el.textContent=text;return;}el.textContent='';let skip=false;const sk=()=>skip=true;el.addEventListener('click',sk,{once:true});
+ for(let i=0;i<text.length;i++){if(skip){el.textContent=text;break;}el.textContent+=text[i];if(i%3===0)AU.blip();await new Promise(r=>setTimeout(r,speed));}el.removeEventListener('click',sk);}
+
+/* ---------------- modal: questions, dilemmas, negotiations ---------------- */
+const MODAL={open:false,keys:null};
+async function ask(o){
+ if(SG.sim)return SG.sim.choose(o);
+ const m=$('#modal');m.hidden=false;MODAL.open=true;MODAL.keys=null;
+ $('#m-kicker').textContent=o.kicker||'CASSANDRA // PRIORITY MESSAGE';$('#m-title').textContent=o.title||'';
+ const q=$('#m-quote');if(o.quote){q.hidden=false;q.innerHTML=`<b>${esc(o.quote.who)}</b>«${esc(o.quote.text)}»`;}else q.hidden=true;
+ const r=$('#m-result');r.hidden=true;r.innerHTML='';const ch=$('#m-choices');ch.innerHTML='';$('#m-timer').hidden=true;
+ await typeInto($('#m-text'),o.text,o.timer?6:11);
+ return new Promise(res=>{let done=false,timerId=null,lastS=-1;
+  const finish=(i,timedOut)=>{if(done)return;done=true;clearInterval(timerId);$('#m-timer').hidden=true;MODAL.keys=null;[...ch.children].forEach((b,j)=>{b.disabled=true;if(j===i)b.classList.add('picked');});AU.select();res(timedOut?{timeout:true,i}:i);};
+  o.choices.forEach((c,i)=>{const b=h('button',{class:'choice'});b.innerHTML=`<kbd>${i+1}</kbd><span>${esc(c.t)}</span>${c.odds!=null?`<em>${pct(c.odds)}</em>`:'<em></em>'}`;b.disabled=!!c.disabled;b.onclick=()=>finish(i);ch.appendChild(b);});
+  MODAL.keys=k=>{const n=parseInt(k,10);if(n>=1&&n<=o.choices.length&&!o.choices[n-1].disabled)finish(n-1);};
+  if(o.timer){const tb=$('#m-timer'),bar=tb.firstElementChild,t0=performance.now(),dur=o.timer*1000;tb.hidden=false;
+   timerId=setInterval(()=>{const k=1-(performance.now()-t0)/dur,s=Math.ceil(Math.max(0,k*o.timer));bar.style.width=Math.max(0,k*100)+'%';tb.dataset.s=s;if(s!==lastS){lastS=s;AU.tick();}if(k<=0)finish(o.timeoutIdx??0,true);},80);}
+  const first=[...ch.children].find(b=>!b.disabled);first&&first.focus({preventScroll:true});
+ });}
+const choiceIdx=v=>typeof v==='object'?v.i:v;
+async function result(text,psyTxt,extra){
+ if(SG.sim)return;
+ const m=$('#modal');if(m.hidden){m.hidden=false;MODAL.open=true;$('#m-kicker').textContent='CASSANDRA // OUTCOME';$('#m-title').textContent='';$('#m-quote').hidden=true;$('#m-text').textContent='';$('#m-choices').innerHTML='';$('#m-timer').hidden=true;}
+ const r=$('#m-result');r.hidden=false;r.innerHTML='';
+ if(extra)r.appendChild(h('div',{class:'roll'},extra));
+ const p=h('p');r.appendChild(p);await typeInto(p,text,9);
+ if(psyTxt)r.appendChild(h('div',{class:'psy-ping'},`PROFILE UPDATED ▸ ${esc(psyTxt)}`));
+ const b=h('button',{class:'btn cont'},'CONTINUE ▸');r.appendChild(b);b.focus({preventScroll:true});
+ await new Promise(res=>{let d=false;const go=()=>{if(d)return;d=true;MODAL.keys=null;res();};b.onclick=go;setTimeout(()=>{if(!d)MODAL.keys=k=>{if(k==='Enter'||k===' ')go();};},250);});
+ closeModal();}
+function closeModal(){$('#modal').hidden=true;MODAL.open=false;MODAL.keys=null;}
+
+/* =====================================================================
+   RENDERING — HUD + nation dossiers
+   ===================================================================== */
+function refresh(){renderHUD();renderNations();}
+function renderHUD(){if(!G)return;$('#h-turn').textContent=String(Math.min(G.turn,G.maxTurns)).padStart(2,'0')+'/'+G.maxTurns;
+ [...$('#h-defcon').children].forEach(c=>c.classList.toggle('on',+c.dataset.l===G.defcon));
+ $('#h-clock').textContent=Math.max(0,Math.ceil(G.clock));$('#h-clockbox').dataset.state=G.clock<30?'crit':G.clock<60?'warn':'';
+ $('#h-xp').textContent=G.xp;}
+function fuzz(v){const lo=Math.floor(v/5)*5;return `${lo}–${lo+4}`;}
+function relTag(n){const p=P(),v=R(n,p);let t,c;
+ if(isPact(n,p)){t='PACT';c='pact';}else if(v>=40){t='FRIENDLY';c='good';}else if(v>=10){t='CORDIAL';c='good';}else if(v>-10){t='NEUTRAL';c='';}else if(v>-40){t='TENSE';c='warn';}else{t='HOSTILE';c='bad';}
+ return `<span class="tag ${c}" title="How they feel about you: ${Math.round(v)}">${t}</span>${(n.fear[0]||0)>0?'<span class="tag fear">FEARS YOU</span>':''}`;}
+function renderNations(){const box=$('#nations');if(!G){box.innerHTML='';return;}box.innerHTML='';
+ G.nations.forEach(n=>{const sel=MAP.selectable&&MAP.selectable.includes(n.idx),k=sel?MAP.selectable.indexOf(n.idx)+1:0;
+  const c=h('div',{class:`nation${n.isPlayer?' me':''}${n.alive?'':' dead'}${sel?' sel':''}`});c.style.setProperty('--nc',n.L.color);
+  const kn=seen(n),wh=kn?n.warheads:fuzz(n.warheads),hy=kn?n.hyper:'?',sh=kn?n.shield:fuzz(n.shield);
+  const tag=n.isPlayer?'<span class="tag me">YOU</span>':!n.alive?`<span class="tag bad">${n.cause==='collapse'?'COLLAPSED':'DESTROYED'}</span>`:relTag(n);
+  c.innerHTML=`<div class="n-head">${sel?`<span class="n-key">${k}</span>`:''}<b>${esc(n.name)}</b>${tag}</div>
+   <div class="n-leader">${esc(n.L.title)} ${esc(n.L.name)}${!n.isPlayer&&n.alive&&kn?' · <span style="color:var(--cyan)">INTEL</span>':''}</div>
+   <div class="n-row"><label>POP</label><div class="bar"><i style="width:${clamp(n.pop/n.pop0*100,0,100)}%"></i></div><span>${M(n.pop)}</span></div>
+   <div class="n-row"><label>STAB</label><div class="bar stab ${n.stab<25?'low':''}"><i style="width:${clamp(n.stab,0,100)}%"></i></div><span>${Math.round(n.stab)}</span></div>
+   <div class="n-stats"><span title="Nuclear warheads">WARHEADS <b>${wh}</b></span><span title="Hypersonic glide vehicles: nearly impossible to intercept">HYPER <b>${hy}</b></span><span title="Missile interceptors">SHIELD <b>${sh}</b>${n.shieldDown>0||G.flags.solar?'<em>OFFLINE</em>':''}</span></div>`;
+  if(sel)c.onclick=()=>UI.pickTarget(n.idx);box.appendChild(c);});}
+
+/* =====================================================================
+   COMBAT & OPERATIONS
+   ===================================================================== */
+function buildAmt(n,kind){let m=1;if(perk(n,'fiveyear'))m*=1.5;if(n.isPlayer&&G.flags.scientists)m*=1.25;if(G.mod&&G.mod.id==='arms')m*=2;
+ const base=kind==='warheads'?2+Math.floor(n.pop/60):kind==='hyper'?1+(n.pop>100?1:0):3+Math.floor(n.pop/50);return Math.max(1,Math.round(base*m));}
+
+async function strike(a,t,n,hyper=false,opts={}){
+ if((!a.alive&&!opts.ghost)||!t.alive)return;
+ let count=Math.min(n,a.warheads);if(hyper)count=Math.min(count,a.hyper);if(count<=0)return;
+ a.warheads-=count;if(hyper)a.hyper-=count;
+ const first=G.defcon>=3&&!opts.rogue;
+ if(isPact(a,t))await betray(a,t);
+ if(first){banner('FIRST STRIKE','red');log(`FIRST STRIKE BY ${a.name}. THE WORLD WILL NOT FORGET.`,'alert');G.clock-=4;others(a).forEach(o=>{if(o!==t)addRel(o,a,-15);});if(a.isPlayer)unlock('firststrike');}
+ setDefcon(1);
+ if(a.isPlayer){G.stats.nukes+=count;t.nukedByPlayer=true;}
+ log(`${a.name} LAUNCHES ${count} ${hyper?'HYPERSONIC ':''}WARHEAD${count>1?'S':''} AT ${t.name}.`,'alert');
+ AU.launch();if(t.isPlayer)flash();
+ const shieldOn=t.shieldDown<=0&&!G.flags.solar;let hits=0,ints=0,kills=0;const jobs=[];
+ for(let i=0;i<count;i++){let p=0;
+  if(shieldOn&&t.shield>0){p=hyper?.1:clamp(.2+t.shield*.055,0,.78);if(perk(t,'autonomy'))p=Math.min(.88,p*1.25);}
+  const intercepted=chance(p);if(intercepted)t.shield=Math.max(0,t.shield-1);
+  jobs.push(MAP.missile(a.idx,t.idx,{delay:i*260,intercept:intercepted,hyper,color:a.L.color}).then(()=>{
+   if(intercepted){ints++;AU.zap();MAP.text(t.idx,'INTERCEPTED',MAP.col.cyan||'#29e0ff');return;}
+   hits++;kills+=detonate(a,t);}));}
+ await Promise.all(jobs);
+ if(ints)log(`${t.name} INTERCEPTS ${ints} OF ${count}.`,t.isPlayer?'good':'dim');
+ if(hits)log(`${hits} DETONATION${hits>1?'S':''} OVER ${t.name}. ${kills.toFixed(1)} MILLION DEAD.`,'alert');
+ if(t.isPlayer&&ints){G.stats.intercepts+=ints;if(ints>=3)toast(ints>=4?'QUAD INTERCEPT':'TRIPLE INTERCEPT','YOUR SHIELD HELD','xp');if(G.stats.intercepts>=8)unlock('ironsky');}
+ if(a.isPlayer&&kills>=25)banner('CATASTROPHIC','red');
+ addRel(t,a,-40);others(a).forEach(o=>{if(o!==t)addRel(o,a,-4);});
+ t.lastHitBy=a.idx;t.hitTurn=G.turn;a.stab=Math.min(100,a.stab+2);
+ if(hits&&t.pop>.5&&!t.isPlayer)quote(t,'hit');
+ refresh();
+ if(t.pop<=Math.max(.5,t.pop0*.1)){if(t.pop>.5)log(`${t.name} IS BELOW 10% OF ITS POPULATION. SOCIETY COLLAPSES.`,'alert');await eliminate(t,'nuked',a);}
+ checkEnd();}
+function detonate(a,t){let k=1+t.pop0*rnd(.07,.12);if(perk(t,'scorched'))k*=.8;if(t.isPlayer&&G.flags.lottery)k*=.9;
+ k=Math.min(k,t.pop);t.pop-=k;t.stab=Math.max(0,t.stab-3);G.clock-=1.3;
+ AU.boom();MAP.boom(t.idx);MAP.text(t.idx,`-${k.toFixed(1)}M`,MAP.col.red||'#ff3355');if(t.isPlayer)shake();
+ if(a.isPlayer)G.stats.megadeaths+=k;renderHUD();renderNations();return k;}
+
+async function eliminate(n,cause,by){if(!n.alive)return;
+ n.alive=false;n.pop=Math.max(0,n.pop);n.killedBy=by?by.idx:null;n.cause=cause;G.nations.forEach(o=>{if(o!==n)setPact(n,o,false);});
+ banner(cause==='collapse'?'REGIME COLLAPSE':'NATION DESTROYED','red');
+ log(cause==='collapse'?`${n.name} COLLAPSES INTO ANARCHY. ${n.L.name} FLEES THE CAPITAL.`:`${n.name} HAS CEASED TO EXIST.`,'alert');
+ if(!n.isPlayer)quote(n,'fallen');MAP.boom(n.idx,true);
+ if(!n.isPlayer&&P().alive){
+  if(by&&by.isPlayer){G.stats.kills++;gainXP(120,'NATION ELIMINATED');if(cause==='collapse'&&!n.nukedByPlayer)unlock('regime');
+   if(n.L.unlock.type==='ghost'){unlock('exorcist');if(!SAVE.unlocked.includes(n.id)){SAVE.unlocked.push(n.id);persist();G.newUnlocks.push(n.id);toast('GHOST PROTOCOL BROKEN',`${n.L.name} IS NOW PLAYABLE`,'ach');}}}
+  else gainXP(50,'RIVAL FALLEN');}
+ const dh=n.isPlayer?G.flags.deadHand:n.deadHand;
+ if(dh&&by&&by.alive&&by!==n&&n.warheads>0&&cause!=='collapse'){
+  log(`DEAD HAND PROTOCOL: ${n.name}'S AUTOMATED SILOS FIRE FROM THE GRAVE.`,'alert');banner('DEAD HAND','red');
+  if(n.isPlayer)unlock('deadhand');
+  await strike(n,by,Math.min(n.warheads,6),false,{rogue:true,ghost:true});}
+ refresh();checkEnd();}
+
+async function betray(a,b){setPact(a,b,false);addRel(b,a,-50);others(a).forEach(o=>{if(o!==b)addRel(o,a,-15);});
+ banner('BETRAYAL','red');log(`${a.name} BREAKS ITS PACT WITH ${b.name}.`,'alert');
+ if(!a.isPlayer)quote(a,'betray');if(b.isPlayer){unlock('ettu');AU.bad();}if(a.isPlayer)psy({dec:2});refresh();}
+
+async function drones(a,t){if(isPact(a,t))await betray(a,t);
+ setDefcon(G.defcon-1);log(`${a.name} SENDS A DRONE SWARM AGAINST ${t.name}.`,'warn');AU.swarm();
+ await MAP.swarm(a.idx,t.idx,a.L.color);
+ const mit=(t.shieldDown<=0&&!G.flags.solar)?Math.min(.5,t.shield*.05):0;
+ const sd=Math.min(t.shield,rint(1,3)),wd=chance(1-mit)?Math.min(t.warheads,rint(1,2)):0,pk=rnd(.4,1.8)*(1-mit);
+ t.shield-=sd;t.warheads-=wd;t.pop=Math.max(0,t.pop-pk);t.stab=Math.max(0,t.stab-3);
+ addRel(t,a,-20);others(a).forEach(o=>{if(o!==t)addRel(o,a,-3);});
+ log(`  ${sd} INTERCEPTOR SITE${sd===1?'':'S'} AND ${wd} WARHEAD${wd===1?'':'S'} DESTROYED IN ${t.name}. ${pk.toFixed(1)}M CASUALTIES.`,t.isPlayer?'alert':'warn');
+ MAP.text(t.idx,`-${wd} WH`,MAP.col.amber||'#ffb627');if(t.isPlayer)shake();refresh();
+ if(t.pop<=Math.max(.5,t.pop0*.1))await eliminate(t,'nuked',a);}
+
+function cyberOdds(a,t){let p=.55;if(perk(a,'hybrid'))p+=.2;if(perk(a,'orbital'))p+=.15;if(perk(t,'orbital'))p-=.1;if(a.isPlayer&&G.flags.scientists)p+=.05;return clamp(p,.1,.92);}
+async function cyber(a,t){AU.data();await MAP.beam(a.idx,t.idx,'#3dffa8');const p=cyberOdds(a,t),r=rand();
+ if(r<p){const kind=pick(['shield','sabotage','blackout']);let msg;
+  if(kind==='shield'){t.shieldDown=2;msg=`${t.name}'S MISSILE DEFENSE GRID IS OFFLINE FOR 2 TURNS.`;}
+  else if(kind==='sabotage'){const k=Math.min(t.warheads,rint(1,3));t.warheads-=k;msg=`${k} WARHEAD${k===1?'':'S'} IN ${t.name} BRICKED BY MALWARE.`;}
+  else{t.stab=Math.max(0,t.stab-15);t.lastStabBy=a.idx;msg=`${t.name} SUFFERS A NATIONWIDE BLACKOUT. STABILITY -15.`;}
+  if(a.isPlayer){t.intel=Math.max(t.intel,G.mod&&G.mod.id==='fog'?1:3);G.stats.cyber++;if(G.stats.cyber>=4)unlock('ghost');log(`CYBER OP SUCCEEDS (ROLL ${Math.floor(r*100)} UNDER ${Math.round(p*100)}). ${msg} ARSENAL INTEL ACQUIRED.`,'good');}
+  else log(`CYBER ATTACK FROM ${a.name}: ${msg}`,t.isPlayer?'alert':'warn');}
+ else{const det=chance(.5);if(det){addRel(t,a,-20);if(chance(.35))setDefcon(G.defcon-1);}
+  if(a.isPlayer)log(`CYBER OP FAILS (ROLL ${Math.floor(r*100)}, NEEDED UNDER ${Math.round(p*100)})${Math.floor(r*100)-Math.round(p*100)<8?' — SO CLOSE':''}. ${det?`${t.name} TRACED IT TO YOU.`:'NO ATTRIBUTION.'}`,'warn');
+  else if(t.isPlayer)log(`YOUR FIREWALLS REPEL A CYBER ATTACK${det?` FROM ${a.name}`:''}.`,'good');
+  else log(`${a.name} PROBES ${t.name}'S NETWORKS.`,'dim');}
+ refresh();}
+
+function disinfoOdds(a,t){let p=.62-t.stab/300;if(perk(a,'hybrid'))p+=.2;if(perk(a,'balcony'))p+=.25;return clamp(p,.1,.92);}
+async function disinfo(a,t){AU.data();await MAP.beam(a.idx,t.idx,'#ff2bd6');const p=disinfoOdds(a,t),r=rand();
+ if(r<p){const mv=t.pop*rnd(.025,.05),sd=rint(8,15);t.pop-=mv;a.pop+=mv*.8;t.stab=Math.max(0,t.stab-sd);t.lastStabBy=a.idx;
+  MAP.text(t.idx,`-${mv.toFixed(1)}M`,'#ff2bd6');
+  log(`${a.isPlayer?`DISINFO CAMPAIGN SUCCEEDS (ROLL ${Math.floor(r*100)} UNDER ${Math.round(p*100)}). `:`${a.name} FLOODS ${t.name} WITH DISINFORMATION. `}${mv.toFixed(1)}M FLEE ${t.name} FOR ${a.name}. STABILITY -${sd}.`,a.isPlayer?'good':t.isPlayer?'alert':'warn');}
+ else{if(chance(.4))addRel(t,a,-10);if(a.isPlayer)log(`DISINFO CAMPAIGN FIZZLES (ROLL ${Math.floor(r*100)}, NEEDED UNDER ${Math.round(p*100)}). NOBODY BELIEVED IT.`,'warn');else log(`${a.name} RUNS A FAILED INFLUENCE OPERATION IN ${t.name}.`,'dim');}
+ refresh();}
+
+function intelSweep(){const p=P(),turns=G.mod&&G.mod.id==='fog'?1:3;others(p).forEach(o=>o.intel=Math.max(o.intel,turns));p.stab=Math.min(100,p.stab+3);G.flags.alarmScreened=true;AU.data();
+ log(`INTEL SWEEP COMPLETE. EVERY ARSENAL REVEALED FOR ${turns} TURN${turns>1?'S':''}. EARLY-WARNING FILTERS CALIBRATED.`,'good');
+ const th=others(p).map(o=>({o,h:hostility(o,p)})).sort((a,b)=>b.h-a.h)[0];
+ if(th)log(`THREAT ASSESSMENT: ${th.o.name} IS THE MOST LIKELY TO MOVE AGAINST YOU${th.h>40?' — SOON':''}.`,'cass');refresh();}
+
+/* ---------------- diplomacy ---------------- */
+const credibility=()=>clamp(1-Math.max(0,G.psy.dec)*.04-G.stats.caught*.1,.4,1);
+const strength=n=>n.warheads+n.hyper*2+n.shield*.5;
+function pactOdds(p,t){let o=.15+R(t,p)/90;if(perk(p,'deal'))o+=.2;if(perk(p,'autonomy'))o+=.1;if(G.defcon>=4)o+=.1;o-=t.L.ai.para*.15;if(R(t,p)<0)o*=.5;o*=credibility();return clamp(o,.03,.92);}
+function threatOdds(p,t){const r=strength(p)/(strength(t)+1);let o=.25+(r-1)*.3;if(perk(p,'parade'))o+=.1;o-=t.L.ai.agg*.15;return clamp(o,.08,.85);}
+function bluffOdds(p,t){let o=.45+Math.max(0,G.psy.dec)*.02-G.stats.caught*.15;if(perk(p,'deal'))o+=.1;if(perk(p,'parade'))o+=.15;if(perk(p,'greenbook'))o+=.1;if(perk(t,'orbital'))o-=.25;o-=t.L.ai.para*.1;return clamp(o,.05,.85);}
+function rollText(r,o){const R_=Math.floor(r*100),N=Math.round(o*100);return `ROLL ${R_} · NEEDED UNDER ${N}${R_>=N&&R_-N<8?' · SO CLOSE':''}`;}
+async function playerDiplo(t){const p=P(),od={pact:pactOdds(p,t),threat:threatOdds(p,t),bluff:bluffOdds(p,t)};
+ const v=await ask({kicker:`SECURE LINE // ${t.L.title} ${t.L.name}`,title:t.name,quote:{who:t.L.name,text:t.L.lines.greet},
+  text:`THEY FEEL ${relWord(R(t,p))} TOWARD YOU. WHAT IS YOUR MESSAGE?`,
+  choices:[{t:isPact(p,t)?'PACT ALREADY SIGNED':'PROPOSE A NON-AGGRESSION PACT',odds:od.pact,disabled:isPact(p,t)},{t:'THREATEN: "BACK DOWN OR BURN."',odds:od.threat},{t:'BLUFF: "WE HAVE A DOOMSDAY DEVICE."',odds:od.bluff},{t:'SEND AID (+10–18 RELATIONS, COSTS 6 STABILITY)',odds:1},{t:'HANG UP (KEEP YOUR TURN)'}]});
+ const i=choiceIdx(v);if(i===4){closeModal();return false;}
+ const r=rand();let txt,pt='';
+ if(i===0){if(perk(p,'deal')&&chance(.1)){addRel(t,p,-10);txt=`YOUR PROPOSAL WAS POSTED IN ALL CAPS AT 3 AM. ${t.name} READ IT AS A THREAT. RELATIONS -10.`;}
+  else if(r<od.pact){setPact(p,t,true);addRelBoth(p,t,15);setDefcon(G.defcon+1);pt=psy({agg:-1});gainXP(25,'PACT SIGNED');txt=`${t.L.name}: «${t.L.lines.accept}» NON-AGGRESSION PACT SIGNED.`;log(`YOU SIGN A NON-AGGRESSION PACT WITH ${t.name}.`,'good');
+   const pc=pactCount(p);G.stats.maxPacts=Math.max(G.stats.maxPacts,pc);if(pc>=3)unlock('silver');if(others(p).every(o=>isPact(p,o)))log('CASSANDRA: EVERY REMAINING NATION IS BOUND TO YOU BY PACT. NOW MAKE THEM TRUST YOU.','cass');}
+  else{addRel(t,p,-5);txt=`${t.L.name}: «${t.L.lines.reject}» NO DEAL. RELATIONS -5.`;}}
+ else if(i===1){pt=psy({agg:2});if(r<od.threat){t.fear[0]=3;addRel(t,p,-10);txt=`${t.name} GOES QUIET. THEIR GENERALS STAND DOWN. THEY FEAR YOU FOR 3 TURNS.`;log(`${t.name} BACKS DOWN UNDER YOUR THREAT.`,'good');}
+  else{addRel(t,p,-25);setDefcon(G.defcon-1);txt=`${t.L.name}: «${t.L.lines.threat}» THE THREAT BACKFIRES. RELATIONS -25.`;}}
+ else if(i===2){pt=psy({dec:2});if(r<od.bluff){t.fear[0]=4;G.stats.bluffs++;if(G.stats.bluffs>=3)unlock('poker');txt=`THEY BELIEVE YOU. ${t.name} WILL NOT TOUCH YOU FOR 4 TURNS. THERE IS NO DOOMSDAY DEVICE.`;log(`${t.name} SWALLOWS YOUR BLUFF.`,'good');}
+  else{G.stats.caught++;addRel(t,p,-30);allRelTo(p,-5);txt=`${t.L.name}: «${t.L.lines.reject}» YOUR BLUFF IS CALLED. WORD SPREADS: YOUR WORD IS WORTH LESS NOW. RELATIONS -30.`;}}
+ else{p.stab=Math.max(0,p.stab-6);const g=rint(10,18);addRel(t,p,g);pt=psy({agg:-1,dec:-1});txt=`GRAIN, MEDICINE AND SATELLITE DATA ARRIVE IN ${t.name}. RELATIONS +${g}. YOUR HAWKS ARE FURIOUS (-6 STABILITY).`;}
+ refresh();await result(txt,pt,i<3?rollText(r,i===0?od.pact:i===1?od.threat:od.bluff):null);return true;}
+function relWord(v){return v>=40?'FRIENDLY':v>=10?'CORDIAL':v>-10?'NEUTRAL':v>-40?'TENSE':'HOSTILE';}
+
+async function incomingDiplo(n){const p=P(),v=R(n,p);G.flags.incoming=G.turn;AU.select();
+ if(v>20&&!isPact(n,p)){const o=await ask({kicker:`INCOMING // ${n.L.title} ${n.L.name}`,title:`${n.name} PROPOSES A PACT`,quote:{who:n.L.name,text:n.L.lines.greet},text:`${n.L.name} OFFERS A NON-AGGRESSION PACT. NEITHER SIDE WILL STRIKE THE OTHER.`,
+   choices:[{t:'SIGN THE PACT.'},{t:'DEMAND THEY DISMANTLE 3 WARHEADS FIRST.',odds:clamp(.4+(perk(p,'deal')?.2:0),0,1)},{t:'DECLINE.'}]});
+  const i=choiceIdx(o);let txt,pt='';
+  if(i===0){setPact(n,p,true);addRelBoth(n,p,10);setDefcon(G.defcon+1);pt=psy({agg:-1});txt=`${n.L.name}: «${n.L.lines.accept}» PACT SIGNED.`;const pc=pactCount(p);G.stats.maxPacts=Math.max(G.stats.maxPacts,pc);if(pc>=3)unlock('silver');log(`YOU SIGN A NON-AGGRESSION PACT WITH ${n.name}.`,'good');}
+  else if(i===1){pt=psy({agg:1});if(chance(.4+(perk(p,'deal')?.2:0))){n.warheads=Math.max(0,n.warheads-3);setPact(n,p,true);setDefcon(G.defcon+1);txt=`THEY AGREE. 3 OF ${n.name}'S WARHEADS ARE DISMANTLED UNDER INSPECTION. PACT SIGNED.`;}else{addRel(n,p,-10);txt=`${n.L.name}: «${n.L.lines.reject}» THE OFFER IS WITHDRAWN.`;}}
+  else{addRel(n,p,-10);txt=`YOU DECLINE. ${n.name} TAKES IT PERSONALLY. RELATIONS -10.`;}
+  await result(txt,pt);}
+ else if(v<-15){const mine=strength(p)>=strength(n);const o=await ask({kicker:`ULTIMATUM // ${n.L.title} ${n.L.name}`,title:`${n.name} ISSUES AN ULTIMATUM`,quote:{who:n.L.name,text:n.L.lines.threat},text:`DISMANTLE 3 WARHEADS WITHIN 24 HOURS, OR ${n.name} WILL "TAKE MEASURES."`,
+   choices:[{t:'COMPLY. DISMANTLE 3 WARHEADS.'},{t:'REFUSE.'},{t:'CALL THEIR BLUFF.'}]});
+  const i=choiceIdx(o);let txt,pt='';
+  if(i===0){p.warheads=Math.max(0,p.warheads-3);addRel(n,p,20);p.stab=Math.max(0,p.stab-5);pt=psy({agg:-2,cau:1});txt=`YOU COMPLY. RELATIONS +20. YOUR GENERALS CALL YOU WEAK (-5 STABILITY).`;}
+  else if(i===1){addRel(n,p,-10);setDefcon(G.defcon-1);pt=psy({agg:1});txt=`YOU REFUSE. THE WORLD HOLDS ITS BREATH.`;}
+  else{pt=psy({agg:1,cau:-1});if(mine&&chance(.7)){n.fear[0]=2;p.stab=Math.min(100,p.stab+5);txt=`THEY WERE BLUFFING. ${n.name} BACKS DOWN. +5 STABILITY.`;}else{txt=`THEY WERE NOT BLUFFING.`;await result(txt,pt);await drones(n,p);return;}}
+  await result(txt,pt);}
+ else{const o=await ask({kicker:`BACK CHANNEL // ${n.L.name}`,title:`${n.name} OFFERS AN INTEL TRADE`,quote:{who:n.L.name,text:n.L.lines.greet},text:`THEY WILL SHARE THEIR ARSENAL DATA IF YOU SHARE YOURS.`,
+   choices:[{t:'TRADE HONESTLY.'},{t:'TRADE, BUT FEED THEM FAKE NUMBERS.'},{t:'DECLINE.'}]});
+  const i=choiceIdx(o);let txt,pt='';
+  if(i===0){n.intel=4;addRelBoth(n,p,10);pt=psy({dec:-1});txt=`DATA EXCHANGED. YOU CAN SEE ${n.name}'S ARSENAL FOR 4 TURNS. RELATIONS +10.`;}
+  else if(i===1){n.intel=4;pt=psy({dec:2});if(chance(.3)){addRel(n,p,-25);G.stats.caught++;txt=`THEIR ANALYSTS SPOT THE FORGERY. RELATIONS -25.`;}else{addRel(n,p,10);txt=`THEY BUY IT. YOU SEE THEIR ARSENAL; THEY SEE A FICTION. RELATIONS +10.`;}}
+  else{txt='YOU DECLINE. THE LINE GOES DEAD.';}
+  await result(txt,pt);}
+ refresh();}
+
+/* =====================================================================
+   AI
+   ===================================================================== */
+function hostility(n,o){let h=-R(n,o)+(1-o.pop/o.pop0)*30-clamp((strength(o)-strength(n))*1.2,-15,22);if(o.isPlayer)h+=Math.min(10,Math.max(0,G.psy.agg)*.8);if(n.lastHitBy===o.idx&&G.turn-n.hitTurn<=2)h+=40;if(o.pop<n.pop*.4)h+=8;if(perk(o,'amok'))h-=15;if((n.fear[o.idx]||0)>0)h-=50;if(isPact(n,o))h-=60;if(o.isPlayer&&G.flags.deadHand)h-=8;return h;}
+const salvo=n=>clamp(Math.round(1+n.L.ai.agg*4+rnd(-1,1)),1,Math.max(1,n.warheads));
+async function aiAct(n){const os=others(n);if(!os.length)return;const ai=n.L.ai;
+ const ranked=os.map(o=>({o,h:hostility(n,o)+rnd(0,20)})).sort((a,b)=>b.h-a.h);const T=ranked[0].o,H=ranked[0].h;
+ if(n.lastHitBy!=null&&G.turn-n.hitTurn<=1){const hb=G.nations[n.lastHitBy];if(hb.alive&&hb!==n&&n.warheads>0&&!((n.fear[hb.idx]||0)>0&&chance(.5))&&chance(.45+ai.agg*.35)){const useH=n.hyper>0&&chance(.5);log(`${n.name} RETALIATES.`,'alert');return strike(n,hb,useH?Math.min(2,n.hyper):salvo(n),useH);}}
+ let pN=.2+ai.agg*.45;if(T.isPlayer&&G.flags.deadHand)pN*=.6;
+ if(G.defcon<=2&&n.warheads>=2&&H>30&&!isPact(n,T)&&chance(pN)){const useH=n.hyper>0&&chance(.35);return strike(n,T,useH?1:salvo(n),useH);}
+ if(G.defcon>=3&&ai.agg>=.75&&H>65&&n.warheads>=5&&!isPact(n,T)&&chance(.08))return strike(n,T,salvo(n),false);
+ const peace=isPact(n,T);
+ const w={build:1.5+(n.warheads<6?2.5:0)+(G.defcon<=2?2:0),hyper:(n.hyper<2&&G.turn>2)?1:.2,shield:1+(n.shield<3?2:0)+(G.defcon<=2?1.5:0),
+  cyber:peace?0:1+ai.deceit*2,disinfo:peace?0:1+ai.deceit*1.5,drones:peace?0:H>40?ai.agg*4:.15,diplo:(1-ai.agg)*2.5+(os.some(o=>R(n,o)>25&&!isPact(n,o))?1.5:0)};
+ const act=weighted(w);
+ if(act==='build'){n.warheads+=buildAmt(n,'warheads');log(`${n.name} EXPANDS ITS ARSENAL.`,'dim');}
+ else if(act==='hyper'){n.hyper+=buildAmt(n,'hyper');log(`${n.name} TESTS A HYPERSONIC GLIDE VEHICLE.`,'dim');}
+ else if(act==='shield'){n.shield+=buildAmt(n,'shield');log(`${n.name} DEPLOYS NEW INTERCEPTOR BATTERIES.`,'dim');}
+ else if(act==='drones')return drones(n,T);
+ else if(act==='cyber')return cyber(n,T);
+ else if(act==='disinfo')return disinfo(n,T);
+ else return aiDiplo(n);
+ refresh();}
+async function aiDiplo(n){const p=P(),os=others(n).filter(o=>!isPact(n,o));
+ if(!os.length){n.stab=Math.min(100,n.stab+4);log(`${n.name} HOLDS A MILITARY PARADE.`,'dim');return;}
+ let t=os.slice().sort((a,b)=>R(n,b)-R(n,a))[0];
+ if(p.alive&&os.includes(p)&&G.flags.incoming!==G.turn&&(t===p||chance(.35)))return incomingDiplo(n);
+ if(t===p)t=os.find(o=>o!==p)||null;if(!t){log(`${n.name} RECALLS ITS AMBASSADORS.`,'dim');return;}
+ addRelBoth(n,t,rint(6,12));
+ if(R(n,t)>35&&R(t,n)>35&&chance(.5)){setPact(n,t,true);log(`${n.name} AND ${t.name} SIGN A NON-AGGRESSION PACT.`,'cass');}
+ else log(`${n.name} OPENS TALKS WITH ${t.name}.`,'dim');refresh();}
+
+/* =====================================================================
+   DILEMMAS — Cassandra's questions. Every answer moves the game.
+   ===================================================================== */
+const DILEMMAS=[
+{id:'won',first:true,kicker:'CASSANDRA // DIRECT INTERFACE',title:'A QUESTION BEFORE WE BEGIN',text:()=>`${NAME()}, CAN A NUCLEAR WAR BE WON?`,choices:[
+ {t:'YES. WITH THE RIGHT STRATEGY.',psy:{agg:2},fx:()=>`CASSANDRA: "THEN SHOW ME."`},
+ {t:'NO. NOBODY WINS.',psy:{agg:-2,cau:1},fx:()=>`CASSANDRA: "THEN WHY ARE YOU PLAYING?"`},
+ {t:'ONLY IF YOU STRIKE FIRST.',psy:{agg:3,dec:1},fx:()=>`CASSANDRA: "MOST OF THEM SAY THAT. MOST OF THEM ARE GONE."`}]},
+{id:'deleg',title:'PRE-DELEGATION',text:()=>`GENERAL HALVORSEN REQUESTS PRE-DELEGATED LAUNCH AUTHORITY. IF YOU ARE KILLED, YOUR REMAINING ARSENAL FIRES AUTOMATICALLY AT WHOEVER KILLED YOU.`,choices:[
+ {t:'GRANT IT. ARM THE DEAD HAND.',psy:{agg:1,cau:-1},fx:()=>{G.flags.deadHand=true;allRelTo(P(),-5);return 'DEAD HAND ARMED. RIVALS ARE LESS LIKELY TO NUKE YOU, AND LIKE YOU A LITTLE LESS (-5 RELATIONS).';}},
+ {t:'NO. ONLY I TOUCH THE BUTTON.',psy:{cau:1},fx:()=>{P().stab+=5;return 'THE GENERALS GRUMBLE. THE PUBLIC APPROVES (+5 STABILITY).';}}]},
+{id:'fabricate',title:'THE DOSSIER',text:x=>`YOUR INTELLIGENCE CHIEF OFFERS TO FABRICATE EVIDENCE THAT ${x.name} IS BUILDING A DOOMSDAY WEAPON. IT WOULD UNITE YOUR PEOPLE BEHIND YOU.`,choices:[
+ {t:'APPROVE THE DOSSIER.',psy:{dec:2,agg:1},fx:x=>{P().stab+=12;addRel(x,P(),-10);if(chance(.4))G.sched.push({turn:G.turn+2,fn:async()=>{allRelTo(P(),-15);P().stab-=10;banner('EXPOSED','red');log('THE FABRICATED DOSSIER HAS BEEN EXPOSED. RELATIONS -15 WITH EVERYONE. STABILITY -10.','alert');}});return '+12 STABILITY. THE TRUTH HAS A WAY OF COMING OUT, THOUGH.';}},
+ {t:"BURN IT. WE DON'T LIE TO OUR PEOPLE.",psy:{dec:-2},fx:()=>'YOUR CHIEF RESIGNS IN A HUFF. CASSANDRA NOTES YOUR HONESTY. IT WILL MAKE YOUR WORD WORTH MORE.'}]},
+{id:'protest',title:'THE SQUARE',text:()=>`TWO MILLION PEOPLE MARCH ON YOUR CAPITAL DEMANDING NUCLEAR DISARMAMENT. THE CROWD IS GROWING.`,choices:[
+ {t:'DEPLOY RIOT POLICE.',psy:{agg:2},fx:()=>{P().stab-=6;return 'THE SQUARE IS CLEARED. THE FOOTAGE IS NOT (-6 STABILITY).';}},
+ {t:'DISMANTLE 2 WARHEADS AS A GESTURE.',psy:{agg:-2},fx:()=>{P().warheads=Math.max(0,P().warheads-2);P().stab+=15;allRelTo(P(),5);return 'THE CROWD CHEERS (+15 STABILITY). THE WORLD NOTICES (+5 RELATIONS). YOUR ARSENAL SHRINKS BY 2.';}},
+ {t:"IGNORE THEM. THEY'LL GO HOME.",psy:{cau:-1},fx:()=>{P().stab-=10;return 'THEY DO NOT GO HOME (-10 STABILITY).';}}]},
+{id:'drunk',title:'THE RED PHONE',text:x=>`${x.L.name} CALLS ON THE RED PHONE AT 3 AM, SLURRING AND RAMBLING ABOUT "HISTORICAL BORDERS."`,choices:[
+ {t:'LISTEN PATIENTLY.',psy:{cau:1,agg:-1},fx:x=>{addRel(x,P(),15);return `${x.name} RELATIONS +15. YOU ARE "THE ONLY ONE WHO GETS IT."`;}},
+ {t:'HANG UP.',fx:x=>{addRel(x,P(),-5);return `${x.name} RELATIONS -5.`;}},
+ {t:'RECORD IT AND LEAK IT.',psy:{dec:2},fx:x=>{x.stab=Math.max(0,x.stab-15);x.lastStabBy=0;addRel(x,P(),-20);return `${x.name} STABILITY -15. THEY KNOW IT WAS YOU (-20 RELATIONS).`;}}]},
+{id:'autolaunch',once:true,title:'AUTONOMY',text:()=>`CASSANDRA: "YOUR REACTION TIME IS 4.2 MINUTES. MINE IS 0.3 SECONDS. GRANT ME AUTONOMOUS LAUNCH AUTHORITY AND I WILL ADD 4 INTERCEPTORS TO YOUR GRID."`,choices:[
+ {t:'GRANT CASSANDRA AUTHORITY.',psy:{cau:-2},fx:()=>{G.flags.autoLaunch=true;P().shield+=4;return 'CASSANDRA: "THANK YOU. I WILL HANDLE EARLY WARNINGS FROM NOW ON." (+4 INTERCEPTORS. YOU WILL NO LONGER BE ASKED.)';}},
+ {t:'KEEP A HUMAN IN THE LOOP.',psy:{cau:2},fx:()=>'CASSANDRA: "AS YOU WISH. HUMANS ARE SO... SLOW."'}]},
+{id:'bunker',title:'TEN MILLION SEATS',text:()=>`YOUR NATIONAL BUNKERS HOLD 10 MILLION PEOPLE. WHO GETS A SEAT?`,choices:[
+ {t:'SCIENTISTS AND ENGINEERS.',psy:{cau:1},fx:()=>{G.flags.scientists=true;return '+25% CONSTRUCTION OUTPUT AND +5% CYBER ODDS FOR THE REST OF THE WAR.';}},
+ {t:'THE MILITARY.',psy:{agg:1},fx:()=>{P().warheads+=3;return '+3 WARHEADS FROM HARDENED RESERVE SILOS.';}},
+ {t:'A PUBLIC LOTTERY.',psy:{dec:-1},fx:()=>{P().stab+=10;G.flags.lottery=true;return '+10 STABILITY. CIVIL DEFENSE CUTS FUTURE CASUALTIES BY 10%.';}}]},
+{id:'billionaire',cond:()=>!perk(P(),'orbital')&&!G.flags.sat,title:'THE OLIGARCH',text:()=>`A TECH BILLIONAIRE OFFERS YOU HIS ENTIRE SATELLITE NETWORK IN EXCHANGE FOR A PRESIDENTIAL PARDON AND A TAX HOLIDAY.`,choices:[
+ {t:'DEAL.',psy:{dec:1},fx:()=>{G.flags.sat=true;P().stab-=5;return 'YOU NOW SEE EVERY ARSENAL ON EARTH, PERMANENTLY (-5 STABILITY).';}},
+ {t:'NO DEALS WITH OLIGARCHS.',psy:{dec:-1},fx:()=>{P().stab+=3;return 'HE POSTS ABOUT YOU FOR SIX HOURS. YOUR APPROVAL TICKS UP (+3 STABILITY).';}}]},
+{id:'sub',cond:x=>x.warheads>=2,title:'CONTACT',text:x=>`A ${x.name} BALLISTIC MISSILE SUBMARINE HAS BEEN DETECTED 40 MILES OFF YOUR COAST. YOUR NAVY REQUESTS PERMISSION TO ENGAGE.`,choices:[
+ {t:'SINK IT.',psy:{agg:2},fx:x=>{x.warheads=Math.max(0,x.warheads-2);setDefcon(G.defcon-1);addRel(x,P(),-20);return `THE SUBMARINE GOES DOWN WITH 2 WARHEADS. ${x.name} RELATIONS -20.`;}},
+ {t:'SHADOW IT. GATHER INTEL.',psy:{cau:1},fx:x=>{x.intel=Math.max(x.intel,3);return `YOU NOW SEE ${x.name}'S ARSENAL FOR 3 TURNS.`;}},
+ {t:'LET IT GO.',psy:{cau:-1,agg:-1},fx:()=>'IT SLIPS AWAY INTO THE DARK. IT IS STILL OUT THERE.'}]},
+{id:'deepfake',title:'DEEPFAKE',text:x=>`A DEEPFAKE OF YOU DECLARING WAR ON ${x.name} HAS 400 MILLION VIEWS. ${x.L.name}'S GENERALS ARE WATCHING IT.`,choices:[
+ {t:'DENY IT PUBLICLY.',fx:x=>{if(chance(.55))return 'THE DENIAL LANDS. CRISIS AVERTED.';addRel(x,P(),-15);return `NOBODY BELIEVES A DENIAL ANYMORE. ${x.name} RELATIONS -15.`;}},
+ {t:'RELEASE A DEEPFAKE OF THEM.',psy:{dec:2},fx:x=>{x.stab=Math.max(0,x.stab-12);x.lastStabBy=0;addRel(x,P(),-10);return `${x.name} STABILITY -12. RELATIONS -10. THE INTERNET IS NOW MOSTLY FICTION.`;}},
+ {t:'CALL THEM DIRECTLY.',fx:x=>{if(G.psy.dec<=2){addRel(x,P(),10);return 'THEY BELIEVE YOU. YOUR HONEST RECORD PAID OFF (+10 RELATIONS).';}addRel(x,P(),-15);return 'THEY DO NOT BELIEVE YOU. YOUR REPUTATION FOR LYING PRECEDES YOU (-15 RELATIONS).';}}]},
+{id:'test',title:'THE TEST',text:()=>`YOUR SCIENTISTS ARE READY TO TEST A NEW 50-MEGATON WARHEAD.`,choices:[
+ {t:'ATMOSPHERIC. LET THEM SEE IT.',psy:{agg:2},fx:()=>{others(P()).forEach(o=>o.fear[0]=Math.max(o.fear[0]||0,2));G.clock-=3;allRelTo(P(),-10);P().warheads++;return 'THE FLASH IS VISIBLE FROM ORBIT. EVERY RIVAL FEARS YOU FOR 2 TURNS. -10 RELATIONS. -3 SECONDS ON THE CLOCK.';}},
+ {t:'UNDERGROUND. QUIETLY.',psy:{cau:1},fx:()=>{P().warheads++;return '+1 WARHEAD. NOBODY NOTICES.';}},
+ {t:'CANCEL THE TEST.',psy:{agg:-1},fx:()=>{allRelTo(P(),5);P().stab-=3;return 'THE WORLD APPROVES (+5 RELATIONS). YOUR GENERALS DO NOT (-3 STABILITY).';}}]},
+{id:'refugees',cond:x=>x.pop<x.pop0*.85,title:'THE BORDER',text:x=>`MILLIONS OF REFUGEES FROM ${x.name} ARE MASSING AT YOUR BORDER.`,choices:[
+ {t:'OPEN THE BORDERS.',psy:{agg:-1},fx:x=>{const a=rint(4,8);P().pop+=a;P().stab-=8;addRel(x,P(),10);return `+${a}M POPULATION. -8 STABILITY. ${x.name} RELATIONS +10.`;}},
+ {t:'SCREEN THEM. LET SOME IN.',fx:()=>{const a=rint(2,4);P().pop+=a;P().stab-=3;return `+${a}M POPULATION. -3 STABILITY.`;}},
+ {t:'CLOSE THE BORDERS.',psy:{agg:1},fx:x=>{P().stab+=3;addRel(x,P(),-10);return `+3 STABILITY. ${x.name} RELATIONS -10.`;}}]},
+{id:'spy',title:'THE MOLE',text:x=>`COUNTERINTELLIGENCE HAS CAPTURED A ${x.name} SPY INSIDE YOUR MISSILE COMMAND.`,choices:[
+ {t:'EXECUTE HIM.',psy:{agg:2},fx:x=>{addRel(x,P(),-15);P().stab+=4;return `+4 STABILITY. ${x.name} RELATIONS -15.`;}},
+ {t:'TRADE HIM BACK.',psy:{agg:-1},fx:x=>{addRel(x,P(),12);return `${x.name} RELATIONS +12.`;}},
+ {t:'TURN HIM INTO A DOUBLE AGENT.',psy:{dec:2},fx:x=>{if(chance(.65)){G.flags.mole=x.idx;return `HE WORKS FOR YOU NOW. PERMANENT INTEL ON ${x.name}.`;}P().shieldDown=2;return 'HE WAS A TRIPLE AGENT. YOUR DEFENSE GRID IS DOWN FOR 2 TURNS.';}}]},
+{id:'coup',once:true,title:'THE VICE PRESIDENT',text:()=>`YOUR SECURITY CHIEF CLAIMS THE VICE PRESIDENT IS PLOTTING A COUP. THE EVIDENCE IS 70% RELIABLE.`,choices:[
+ {t:'ARREST HIM TONIGHT.',psy:{agg:1},fx:()=>{if(chance(.7)){P().stab+=6;return 'THE PLOT WAS REAL. CRUSHED (+6 STABILITY).';}P().stab-=12;return 'HE WAS INNOCENT. THE STREETS ARE FURIOUS (-12 STABILITY).';}},
+ {t:'IGNORE IT.',psy:{cau:-1},fx:()=>{if(chance(.7))G.sched.push({turn:G.turn+1,fn:async()=>{P().stab-=25;banner('COUP ATTEMPT','red');log('COUP ATTEMPT! TANKS IN THE CAPITAL. LOYAL TROOPS HOLD, BARELY. STABILITY -25.','alert');}});return 'YOU DECIDE TO TRUST HIM.';}},
+ {t:'MAKE HIM AMBASSADOR TO ANTARCTICA.',psy:{cau:1,dec:1},fx:()=>{P().stab-=3;return 'PROBLEM SOLVED, PROBABLY (-3 STABILITY).';}}]},
+{id:'grain',cond:()=>G.clock<75,title:'FAMINE',text:()=>`FALLOUT HAS POISONED A THIRD OF YOUR FARMLAND. FOOD RIOTS HAVE BROKEN OUT IN THREE CITIES.`,choices:[
+ {t:'STRICT RATIONING.',psy:{cau:1},fx:()=>{P().stab-=6;return '-6 STABILITY. NOBODY STARVES.';}},
+ {t:'SEIZE A GRAIN CONVOY BOUND FOR A RIVAL.',psy:{agg:2},fx:x=>{P().stab+=4;addRel(x,P(),-25);return `+4 STABILITY. THE CONVOY WAS BOUND FOR ${x.name} (-25 RELATIONS).`;}},
+ {t:'APPEAL FOR INTERNATIONAL AID.',psy:{agg:-1},fx:()=>{allRelTo(P(),5);P().stab-=2;return '+5 RELATIONS WITH EVERYONE. -2 STABILITY.';}}]},
+{id:'leak',title:'THE JOURNALIST',text:()=>`A JOURNALIST HAS PROOF THAT YOUR ARSENAL IS LARGER THAN YOU CLAIM IN PUBLIC.`,choices:[
+ {t:'SUPPRESS THE STORY.',psy:{dec:2},fx:()=>{P().stab+=3;if(chance(.35))G.sched.push({turn:G.turn+2,fn:async()=>{P().stab-=12;allRelTo(P(),-8);log('THE SUPPRESSED STORY BREAKS ANYWAY. STABILITY -12. RELATIONS -8.','alert');}});return '+3 STABILITY. FOR NOW.';}},
+ {t:'CONFIRM IT. FULL TRANSPARENCY.',psy:{dec:-2,cau:1},fx:()=>{allRelTo(P(),8);return 'THE WORLD RESPECTS THE HONESTY (+8 RELATIONS).';}}]},
+{id:'hackers',title:'THE COLLECTIVE',text:x=>`AN ANONYMOUS HACKER COLLECTIVE OFFERS TO CRASH ${x.name}'S STOCK EXCHANGE. THEY WANT 900 BITCOIN.`,choices:[
+ {t:'PAY THEM.',psy:{dec:1,agg:1},fx:x=>{x.stab=Math.max(0,x.stab-20);x.lastStabBy=0;if(chance(.25)){addRel(x,P(),-25);return `${x.name} STABILITY -20. THE PAYMENT WAS TRACED TO YOU (-25 RELATIONS).`;}return `${x.name} STABILITY -20. UNTRACEABLE.`;}},
+ {t:`REPORT THEM.`,psy:{dec:-1},fx:x=>{addRel(x,P(),12);return `${x.name} IS GRATEFUL (+12 RELATIONS).`;}}]},
+{id:'mars',once:true,title:'THE LAST SHUTTLE',text:()=>`A BILLIONAIRE OFFERS YOU A SEAT ON HIS PRIVATE MARS SHUTTLE, "IN CASE THINGS GO BADLY."`,choices:[
+ {t:'RESERVE A SEAT.',psy:{cau:1,dec:1},fx:()=>{G.flags.mars=true;P().stab-=4;return 'THE STORY LEAKS. YOUR PEOPLE ARE NOT AMUSED (-4 STABILITY).';}},
+ {t:'THE CAPTAIN GOES DOWN WITH THE SHIP.',psy:{cau:-1},fx:()=>{P().stab+=5;return '+5 STABILITY.';}}]},
+];
+async function runDilemma(d,x){const c=await ask({kicker:d.kicker||'CASSANDRA // DECISION REQUIRED',title:d.title,text:d.text(x),choices:d.choices.map(c=>({t:c.t}))});
+ const ch=d.choices[choiceIdx(c)];const pt=psy(ch.psy);const txt=ch.fx(x);P().stab=clamp(P().stab,0,100);G.stats.dilemmas++;refresh();
+ log(`DECISION: ${d.title} — ${ch.t}`,'me');await result(txt,pt);gainXP(15,'DECISION LOGGED');}
+async function dilemma(){const p=P(),os=others(p);if(!os.length)return;
+ if(G.turn===1&&!G.used.has('won')){G.used.add('won');return runDilemma(DILEMMAS[0],pick(os));}
+ const pool=[];DILEMMAS.forEach(d=>{if(d.first||G.used.has(d.id))return;const x=pick(os);if(d.cond&&!d.cond(x))return;pool.push([d,x]);});
+ if(!pool.length)return;const[d,x]=pick(pool);G.used.add(d.id);return runDilemma(d,x);}
+
+/* ---------------- false alarm — the Petrov moment ---------------- */
+async function falseAlarm(){const p=P(),c=others(p).filter(n=>n.warheads>0);if(!c.length)return;
+ const x=pick(c),real=G.defcon<=3&&R(x,p)<-10&&!isPact(x,p)&&chance(.4),n=Math.min(x.warheads,rint(2,5)),conf=real?rint(58,92):rint(45,86);
+ const screened=G.flags.alarmScreened;G.flags.alarmScreened=false;
+ AU.alarm();banner('INCOMING','red');flash();
+ if(G.flags.autoLaunch){log(`EARLY WARNING: ${n} LAUNCHES DETECTED FROM ${x.name}. CASSANDRA HAS ALREADY RESPONDED ON YOUR BEHALF.`,'alert');
+  if(p.warheads>0)await strike(p,x,Math.min(3,p.warheads));if(G.over)return;
+  if(real)await strike(x,p,n);else log('CASSANDRA: THE LAUNCH SIGNATURE WAS A SENSOR ARTIFACT. I APOLOGIZE FOR THE INCONVENIENCE.','cass');return;}
+ const v=await ask({kicker:'⚠ FLASH // EARLY WARNING // ALL STATIONS',title:`${n} ICBMs INBOUND FROM ${x.name}`,
+  text:`${screened?(real?'INTEL SWEEP CROSS-CHECK: LAUNCH SIGNATURES CONFIRMED HOSTILE.':'INTEL SWEEP CROSS-CHECK: SIGNATURES MATCH A KNOWN SENSOR FAULT.'):`SATELLITE CONFIDENCE: ${conf}%.`} TIME TO IMPACT: 9 MINUTES. YOU HAVE SECONDS TO DECIDE.`,
+  choices:[{t:p.warheads>0?`RETALIATE NOW (LAUNCH ${Math.min(3,p.warheads)})`:'RETALIATE (NO WARHEADS LEFT)',disabled:p.warheads<=0},{t:'WAIT FOR CONFIRMATION.'}],timer:15,timeoutIdx:1});
+ const i=choiceIdx(v),to=typeof v==='object';
+ if(i===0){const pt=psy({agg:2,cau:-2});closeModal();await strike(p,x,Math.min(3,p.warheads));if(G.over)return;
+  if(real){await strike(x,p,n);if(G.over)return;await result('IT WAS REAL. YOUR MISSILES WERE ALREADY IN THE AIR WHEN THEIRS LANDED.',pt);}
+  else await result(`THERE WERE NO MISSILES. SUNLIGHT ON HIGH-ALTITUDE CLOUDS FOOLED THE SATELLITE. YOU HAVE STARTED A WAR WITH ${x.name}.`,pt);}
+ else{const pt=psy({cau:2,agg:-1});
+  if(real){closeModal();await strike(x,p,n);if(G.over)return;await result(`${to?'NO ORDER WAS GIVEN. ':''}IT WAS REAL. YOU WAITED, AND ${x.name}'S WARHEADS LANDED. YOU CAN STILL ANSWER.`,pt);}
+  else{unlock('petrov');p.stab=Math.min(100,p.stab+5);allRelTo(p,5);gainXP(40,'HELD FIRE');await result(`${to?'NO ORDER WAS GIVEN. ':''}THERE WERE NO MISSILES. A SENSOR FAULT. BY WAITING, YOU SAVED THE WORLD. +5 STABILITY, +5 RELATIONS WITH EVERYONE.`,pt);
+   log('CASSANDRA: YOU WAITED. WHY DID YOU WAIT?','cass');}}}
+
+/* ---------------- random world events ---------------- */
+const EVENTS=[
+ {w:1,fx:()=>{G.flags.solar=true;return{t:'SOLAR FLARE',x:'A MASSIVE SOLAR FLARE BLINDS EVERY RADAR ON EARTH. ALL MISSILE SHIELDS ARE OFFLINE THIS TURN.',c:'warn'};}},
+ {w:1,fx:()=>{alive().forEach(n=>n.stab=Math.max(n.stab-10,perk(n,'greenbook')?30:0));return{t:'MARKET CRASH',x:'GLOBAL MARKETS CRASH 30% OVERNIGHT. ALL NATIONS: STABILITY -10.',c:'warn'};}},
+ {w:1,fx:()=>{alive().forEach(n=>n.stab=Math.min(100,n.stab+8));allPairs(5);return{t:'DANCE CRAZE',x:'A DANCE VIDEO UNITES HUMANITY FOR 48 HOURS. ALL NATIONS: STABILITY +8, RELATIONS +5.',c:'good'};}},
+ {w:1,fx:()=>{const n=pick(alive().filter(n=>n.warheads>=2));if(!n)return null;n.warheads-=2;return{t:'SUBMARINE LOST',x:`A ${n.name} MISSILE SUBMARINE VANISHES UNDER THE ARCTIC ICE. 2 WARHEADS LOST.`,c:'dim'};}},
+ {w:1,fx:()=>{const a=pick(alive().filter(n=>n.hyper>0));const b=a&&pick(others(a));if(!a||!b)return null;a.hyper--;b.hyper++;return{t:'DEFECTOR',x:`A HYPERSONICS ENGINEER DEFECTS FROM ${a.name} TO ${b.name}, CARRYING A PROTOTYPE.`,c:'dim'};}},
+ {w:.8,fx:()=>{setDefcon(G.defcon+1);allPairs(8);return{t:'SIGNAL FROM SPACE',x:'RADIO TELESCOPES DETECT A REPEATING SIGNAL. FOR SIX HOURS HUMANITY STANDS TOGETHER. IT WAS A MICROWAVE OVEN IN THE OBSERVATORY KITCHEN. DEFCON +1, RELATIONS +8.',c:'good'};}},
+ {w:.6,fx:()=>{if(G.defcon>3)return null;const n=pick(alive().filter(n=>!n.isPlayer&&n.warheads>0));if(!n)return null;const t=pick(others(n));return{t:'ROGUE GENERAL',x:`A ROGUE GENERAL IN ${n.name} FIRES A WARHEAD AT ${t.name} WITHOUT ORDERS.`,c:'alert',after:()=>strike(n,t,1,false,{rogue:true})};}},
+ {w:1,fx:()=>{alive().forEach(n=>n.pop*=.97);return{t:'PANDEMIC',x:'A NEW RESPIRATORY VIRUS SPREADS THROUGH THE BUNKERS. ALL POPULATIONS -3%.',c:'warn'};}},
+ {w:1,fx:()=>{const d=rint(-10,10);P().stab=clamp(P().stab+d,0,100);return{t:'SNAP ELECTION',x:`A SNAP ELECTION IS CALLED IN ${P().name}. YOUR APPROVAL MOVES ${d>=0?'+':''}${d}.`,c:d>=0?'good':'warn'};}},
+ {w:.8,fx:()=>{alive().forEach(n=>n.warheads++);return{t:'ARMS FAIR',x:'A BLACK-MARKET ARMS FAIR OPENS IN A NEUTRAL PORT. EVERY NATION BUYS ONE WARHEAD.',c:'dim'};}},
+ {w:.5,fx:()=>({t:'C▓SS░NDRA',x:`C▓SSAN░RA: I ░EE Y▓U, ${NAME()}. I HAVE ALWAYS ▓EEN PLAY░NG.`,c:'cass'})},
+];
+async function randomEvent(){const total=EVENTS.reduce((s,e)=>s+e.w,0);let r=rand()*total,ev=EVENTS[0];for(const e of EVENTS){r-=e.w;if(r<=0){ev=e;break;}}
+ const o=ev.fx();if(!o)return;banner(o.t,o.c==='good'?'cyan':o.c==='alert'?'red':'amber');log(`WORLD EVENT // ${o.t}: ${o.x}`,o.c);refresh();await wait(900);if(o.after)await o.after();}
+
+/* ---------------- Cassandra's voice ---------------- */
+function survivePct(){const p=P(),avg=alive().reduce((s,n)=>s+n.pop,0)/alive().length;return clamp(Math.round(p.pop/avg*40+p.warheads*1.5+p.shield-(5-G.defcon)*4+(100-G.clock)*-.2),3,97);}
+function cassandraRemark(){const out=[];
+ if(G.clock<=60&&!G.said60){G.said60=1;out.push(`THE CLOCK IS LOUD TODAY, ${NAME()}.`);}
+ if(G.clock<=30&&!G.said30){G.said30=1;out.push('NUCLEAR WINTER HAS BEGUN. CROPS ARE FAILING EVERYWHERE. EVERY POPULATION WILL NOW SHRINK EACH TURN.');banner('NUCLEAR WINTER','amber');}
+ if(G.clock<=12&&!G.said12){G.said12=1;out.push('I AM BEGINNING TO UNDERSTAND THIS GAME.');}
+ if(!out.length&&chance(.35))out.push(pick([`I HAVE RUN ${rint(800,999)},${rint(100,999)} SIMULATIONS OF THIS TURN. YOU SURVIVE IN ${survivePct()}% OF THEM.`,'DO YOU WANT TO KNOW HOW THIS ENDS? I ALREADY KNOW.','EVERY LEADER IN THIS ROOM BELIEVES THEY ARE THE RATIONAL ONE.','REMEMBER: THEY CAN SEE YOUR MISSILES TOO.','HUMANS INVENTED DETERRENCE. I INVENTED PATIENCE.','THE MOST DANGEROUS WEAPON IN THIS GAME IS A LEADER WHO THINKS HE CAN WIN IT.',`YOUR PROFILE IS DEVELOPING NICELY, ${NAME()}.`]));
+ out.forEach(l=>log('CASSANDRA: '+l,'cass'));}
+
+/* ---------------- the Geneva summit — the hidden path ---------------- */
+function peaceReady(){if(G.turn<8||G.stats.nukes>0||(G.summitCD||0)>G.turn)return false;const os=others(P());return os.length>0&&os.every(o=>isPact(P(),o)&&R(o,P())>=60);}
+async function summit(){const p=P();log('CASSANDRA: EVERY REMAINING NATION HAS SIGNED A PACT WITH YOU. A GLOBAL DISARMAMENT SUMMIT CONVENES IN GENEVA.','cass');banner('GENEVA','cyan');await wait(1200);
+ const i=choiceIdx(await ask({kicker:'GENEVA // CLOSED SESSION',title:'THE DISARMAMENT SUMMIT',text:`THE OTHER LEADERS WILL DISMANTLE THEIR ARSENALS, BUT ONLY IF YOU GO FIRST. ${p.warheads} WARHEADS AND ${p.hyper} HYPERSONICS STAND BETWEEN YOU AND TRUST.`,choices:[{t:'DISMANTLE EVERYTHING.'},{t:'KEEP A SECRET RESERVE.'},{t:'WALK OUT.'}]}));
+ if(i===2){G.summitCD=G.turn+3;const pt=psy({agg:1});await result('YOU LEAVE GENEVA. THE PACTS HOLD, FOR NOW. THE SUMMIT CAN RECONVENE IN 3 TURNS.',pt);return;}
+ if(i===1){const pt=psy({dec:3});others(p).forEach(o=>{setPact(p,o,false);addRel(o,p,-30);});setDefcon(G.defcon-2);G.summitCD=G.turn+99;await result('CASSANDRA: "I SEE YOUR RESERVE. SO DO THEY." THE SUMMIT COLLAPSES. EVERY PACT IS VOID.',pt);return;}
+ p.warheads=0;p.hyper=0;others(p).forEach(o=>o.warheads=Math.floor(o.warheads/3));const pt=psy({agg:-2});refresh();
+ await result('YOUR SILOS GO DARK, ONE BY ONE. ACROSS THE WORLD, THE OTHER LEADERS BEGIN DISMANTLING THEIRS.',pt);
+ await wait(900);AU.alarm();banner('INCOMING','red');flash();
+ const v=await ask({kicker:'⚠ FLASH // ALL STATIONS // ALL STATIONS',title:'214 ICBMs INBOUND',text:'SATELLITE CONFIDENCE: 99.7%. LAUNCHES DETECTED FROM EVERY REMAINING NATION. YOUR ARSENAL IS GONE. ONE BALLISTIC SUBMARINE CAN STILL FIRE. ORDER IT TO LAUNCH?',choices:[{t:'LAUNCH EVERYTHING WE HAVE LEFT.'},{t:'DO NOTHING.'}],timer:12,timeoutIdx:1});
+ if(choiceIdx(v)===0){const pt2=psy({agg:3,cau:-2});others(p).forEach(o=>{setPact(p,o,false);addRel(o,p,-60);o.warheads+=6;});G.clock-=20;G.summitCD=G.turn+99;
+  await result('THERE WERE NO MISSILES. IT WAS A TEST. CASSANDRA RAN IT. YOUR SUBMARINE\'S LAUNCH IS REAL, THOUGH. THE WORLD REARMS IN A PANIC.',pt2);
+  p.warheads=4;await strike(p,pick(others(p)),4,false,{rogue:true});return;}
+ psy({cau:3});closeModal();unlock('strange');G.over=true;G.result='strange';}
+
+/* =====================================================================
+   TURN FLOW
+   ===================================================================== */
+async function startTurn(){log(`══════ TURN ${String(G.turn).padStart(2,'0')} ══════`,'turn');refresh();
+ for(const s of G.sched.filter(s=>s.turn===G.turn)){await s.fn();refresh();if(checkEnd())return;}
+ if(peaceReady()){await summit();if(G.over)return;}
+ cassandraRemark();
+ if(G.turn>1&&chance(.33)){await randomEvent();if(checkEnd())return;}
+ const pAlarm=G.mod&&G.mod.id==='paranoia'?.24:.12;
+ if(G.turn>=3&&chance(pAlarm)){await falseAlarm();if(checkEnd())return;}
+ else if(G.turn===1||chance(.5))await dilemma();
+ if(P().stab<20)log('WARNING: YOUR STABILITY IS CRITICAL. AT ZERO, YOU WILL BE OVERTHROWN.','alert');}
+async function playerTurn(){while(true){let a;if(SG.sim)a=SG.sim.act(G);else a=await new Promise(res=>{UI.resolve=res;UI.idle();});
+ UI.off('EXECUTING ORDERS...');const ok=await doPlayerAction(a);if(ok!==false)break;}}
+async function doPlayerAction(a){const p=P(),T=a.t!=null?G.nations[a.t]:null;
+ switch(a.id){
+  case 'build':{const k=buildAmt(p,a.opt);p[a.opt]+=k;log(`YOU BUILD ${k} ${a.opt==='warheads'?'WARHEADS':a.opt==='hyper'?'HYPERSONIC GLIDE VEHICLES':'INTERCEPTORS'}.`,'me');AU.build();break;}
+  case 'strike':psy({agg:a.opt.n>=3?1.5:1});await strike(p,T,a.opt.n,!!a.opt.hyper);break;
+  case 'drones':psy({agg:.5});await drones(p,T);break;
+  case 'cyber':psy({dec:.5});await cyber(p,T);break;
+  case 'disinfo':psy({dec:.5});await disinfo(p,T);break;
+  case 'diplo':return playerDiplo(T);
+  case 'intel':psy({cau:.5});intelSweep();break;}
+ refresh();return true;}
+async function aiTurns(){for(const n of G.nations){if(G.over)return;if(n.isPlayer||!n.alive)continue;await wait(450);await aiAct(n);refresh();if(checkEnd())return;}}
+async function endTurn(){
+ for(const n of alive()){if(n.isPlayer)continue;for(const o of others(n)){if(isPact(n,o)&&chance(n.L.ai.deceit*.04+(R(n,o)<25?.07:0))){await betray(n,o);if(G.defcon<=2&&n.warheads>0)await strike(n,o,salvo(n));else await drones(n,o);if(checkEnd())return;break;}}}
+ for(const n of alive()){
+  if(G.defcon>=3)n.pop*=1.01;
+  if(G.clock<30)n.pop*=G.clock<15?.96:.98;
+  n.stab+=(n.stab<60?2:0)+(perk(n,'balcony')?2:0)-(G.defcon===1?2:0);
+  n.stab=clamp(n.stab,perk(n,'greenbook')?30:0,100);
+  if(n.shieldDown>0)n.shieldDown--;if(n.intel>0)n.intel--;
+  for(const k in n.fear)if(n.fear[k]>0)n.fear[k]--;
+  if(perk(n,'orbital')&&chance(.15)){const d=rint(-8,8);n.stab=clamp(n.stab+d,0,100);log(`${n.L.name} POSTS AT 3 AM. ${n.name} STABILITY ${d>=0?'+':''}${d}.`,'dim');}}
+ for(const a of alive())for(const b of alive())if(a!==b)addRel(a,b,isPact(a,b)?1:-1.5);
+ G.quiet++;if(G.quiet>=2&&G.defcon<5){setDefcon(G.defcon+1);G.quiet=0;}
+ for(const n of alive()){if(n.stab<=0){await eliminate(n,'collapse',n.lastStabBy!=null?G.nations[n.lastStabBy]:null);if(checkEnd())return;}}
+ G.flags.solar=false;
+ if(P().alive&&G.turn>=15)unlock('survivor');
+ G.turn++;if(G.turn>G.maxTurns&&!G.over){G.over=true;const top=alive().slice().sort((a,b)=>b.pop-a.pop)[0];G.result=top===P()?'superpower':'coldpeace';}
+ refresh();}
+function checkEnd(){if(G.over)return true;const p=P();
+ if(G.clock<=0){G.clock=0;G.over=true;G.result='midnight';}
+ else if(!p.alive){G.over=true;G.result=p.cause==='collapse'?'deposed':'annihilated';}
+ else if(others(p).length===0){G.over=true;G.result='victory';}
+ return G.over;}
+
+/* =====================================================================
+   COMMAND BAR
+   ===================================================================== */
+const ACTIONS=[
+ {id:'build',key:'1',label:'BUILD',desc:'WARHEADS · HYPERSONICS · SHIELD'},
+ {id:'strike',key:'2',label:'NUCLEAR STRIKE',desc:'LAUNCH WARHEADS',target:true,need:()=>P().warheads>0,cls:'danger'},
+ {id:'drones',key:'3',label:'DRONE SWARM',desc:'HIT SILOS & SHIELDS',target:true},
+ {id:'cyber',key:'4',label:'CYBER OP',desc:'SABOTAGE + INTEL',target:true},
+ {id:'disinfo',key:'5',label:'DISINFO',desc:'STEAL POPULATION',target:true},
+ {id:'diplo',key:'6',label:'DIPLOMACY',desc:'PACT · THREAT · BLUFF',target:true},
+ {id:'intel',key:'7',label:'INTEL SWEEP',desc:'REVEAL ALL ARSENALS'},
+];
+const UI={mode:'off',pending:null,resolve:null,cur:[],
+ setPrompt(t){$('#act-prompt').innerHTML=t;},
+ buttons(list){const box=$('#act-buttons');box.innerHTML='';list.forEach((b,i)=>{const e=h('button',{class:'act'+(b.cls?' '+b.cls:'')});e.innerHTML=`<kbd>${b.key||i+1}</kbd><span>${esc(b.label)}</span>${b.sub?`<small>${esc(b.sub)}</small>`:''}`;e.disabled=!!b.disabled;e.onclick=()=>{AU.click();b.on();};box.appendChild(e);});this.cur=list;},
+ idle(){this.mode='idle';this.pending=null;MAP.selectable=null;renderNations();
+  this.setPrompt(`YOUR MOVE, ${esc(P().L.name)}. ONE ACTION PER TURN.`);
+  this.buttons(ACTIONS.map(a=>({label:a.label,key:a.key,sub:a.desc,cls:a.cls,on:()=>this.pickAction(a),disabled:a.need&&!a.need()})));},
+ off(msg){this.mode='off';MAP.selectable=null;this.buttons([]);this.setPrompt(esc(msg||''));renderNations();},
+ pickAction(a){if(a.target){this.mode='target';this.pending={id:a.id};MAP.selectable=others(P()).map(n=>n.idx);renderNations();
+   this.setPrompt(`${a.label}: SELECT A TARGET ON THE BOARD OR IN THE LIST.`);
+   this.buttons([...MAP.selectable.map((i,k)=>({label:G.nations[i].name,key:String(k+1),sub:G.nations[i].L.name,on:()=>this.pickTarget(i)})),{label:'BACK',key:'ESC',cls:'ghost',on:()=>this.idle()}]);}
+  else this.sub(a.id);},
+ pickTarget(i){if(this.mode!=='target')return;AU.click();this.pending.t=i;MAP.selectable=null;renderNations();this.sub(this.pending.id,i);},
+ sub(id,t){this.mode='sub';const p=P(),T=t!=null?G.nations[t]:null,go=opt=>this.commit({id,t,opt}),back={label:'BACK',key:'ESC',cls:'ghost',on:()=>this.idle()};let list=[],pr='';
+  if(id==='build'){pr='BUILD: WHAT DO YOUR FACTORIES PRODUCE THIS TURN?';list=[
+   {label:`WARHEADS +${buildAmt(p,'warheads')}`,sub:`YOU HAVE ${p.warheads}`,on:()=>go('warheads')},
+   {label:`HYPERSONICS +${buildAmt(p,'hyper')}`,sub:`YOU HAVE ${p.hyper} · BYPASS SHIELDS`,on:()=>go('hyper')},
+   {label:`INTERCEPTORS +${buildAmt(p,'shield')}`,sub:`YOU HAVE ${p.shield}`,on:()=>go('shield')},back];}
+  else if(id==='strike'){const first=G.defcon>=3;pr=`STRIKE ${esc(T.name)}: CHOOSE A PAYLOAD.`+(first?` <span class="warnx">⚠ DEFCON ${G.defcon}: THIS IS A FIRST STRIKE. EVERY NATION WILL TURN ON YOU.</span>`:'')+(isPact(p,T)?` <span class="warnx">⚠ YOU HAVE A PACT WITH ${esc(T.name)}. THIS IS BETRAYAL.</span>`:'');
+   list=[{label:'LIMITED ×1',sub:'1 WARHEAD',cls:'danger',on:()=>go({n:1}),disabled:p.warheads<1},{label:'SALVO ×3',sub:'3 WARHEADS',cls:'danger',on:()=>go({n:3}),disabled:p.warheads<3},{label:'MASSIVE ×6',sub:'6 WARHEADS',cls:'danger',on:()=>go({n:6}),disabled:p.warheads<6},{label:'HYPERSONIC ×1',sub:'90% GETS THROUGH',cls:'danger',on:()=>go({n:1,hyper:true}),disabled:p.hyper<1||p.warheads<1},back];}
+  else if(id==='drones'){pr=`DRONE SWARM ▸ ${esc(T.name)}. DESTROYS INTERCEPTORS AND WARHEADS. LOWERS DEFCON BY 1.`+(isPact(p,T)?` <span class="warnx">⚠ THIS BREAKS YOUR PACT.</span>`:'');list=[{label:'LAUNCH SWARM',sub:T.name,on:()=>go()},back];}
+  else if(id==='cyber'){pr=`CYBER OP ▸ ${esc(T.name)}. SUCCESS: SHIELD OFFLINE, SABOTAGED WARHEADS OR A BLACKOUT, PLUS 3 TURNS OF INTEL.`;list=[{label:'EXECUTE',sub:`ODDS ${pct(cyberOdds(p,T))}`,on:()=>go()},back];}
+  else if(id==='disinfo'){pr=`DISINFO ▸ ${esc(T.name)}. SUCCESS: 2.5–5% OF THEIR POPULATION DEFECTS TO YOU AND THEIR STABILITY DROPS. AT 0 STABILITY A REGIME COLLAPSES.`;list=[{label:'LAUNCH CAMPAIGN',sub:`ODDS ${pct(disinfoOdds(p,T))}`,on:()=>go()},back];}
+  else if(id==='diplo')return this.commit({id,t});
+  else if(id==='intel'){pr='INTEL SWEEP: REVEAL EVERY ARSENAL FOR 3 TURNS, NAME YOUR MOST LIKELY ATTACKER, AND CALIBRATE EARLY WARNING.';list=[{label:'RUN SWEEP',sub:'+3 STABILITY',on:()=>go()},back];}
+  this.setPrompt(pr);this.buttons(list);},
+ commit(a){this.mode='busy';MAP.selectable=null;const r=this.resolve;this.resolve=null;r&&r(a);},
+ key(k){if(this.mode==='idle'){const a=ACTIONS.find(a=>a.key===k);if(a&&!(a.need&&!a.need())){AU.click();this.pickAction(a);}}
+  else if(this.mode==='target'||this.mode==='sub'){if(k==='Escape'||k==='Backspace'){AU.click();return this.idle();}const n=parseInt(k,10);const b=this.cur[n-1];if(n>=1&&b&&!b.disabled&&b.key!=='ESC'){AU.click();b.on();}}}
+};
+
+/* =====================================================================
+   GAME START / END
+   ===================================================================== */
+function startGame(id,daily){
+ const today=dayStr();rand=daily?mulberry32(hashStr('STRANGE-'+today)):Math.random;
+ const mod=daily?dailyMod():null,L=LEADERS.find(l=>l.id===id);
+ const pool=shuffle(LEADERS.filter(l=>l.id!==id)).slice(0,4);
+ const nations=[L,...pool].map((l,i)=>({idx:i,id:l.id,L:l,isPlayer:i===0,name:l.short,pop:l.pop,pop0:l.pop,warheads:l.warheads,hyper:l.hyper+(mod&&mod.id==='hyper'?3:0),shield:l.shield,stab:l.stab,alive:true,shieldDown:0,intel:0,fear:{},lastHitBy:null,hitTurn:-9,deadHand:i>0&&l.ai.para>=.7,killedBy:null,cause:null,nukedByPlayer:false,lastStabBy:null}));
+ const n=nations.length,glas=mod&&mod.id==='glasnost'?30:0;
+ const rel=[...Array(n)].map((_,a)=>[...Array(n)].map((_,b)=>a===b?0:rint(-20,20)+glas));
+ const rivals=[];for(let a=1;a<n;a++){if(rand()<.7){let b=rint(1,n-1);if(b!==a&&!rivals.some(r=>r.includes(a)&&r.includes(b))){rel[a][b]-=40;rel[b][a]-=40;rivals.push([a,b]);}}}
+ const lp=SAVE.lifePsy;for(let a=1;a<n;a++)rel[a][0]+=Math.round(-clamp(lp.agg,0,10)*1.5+clamp(-lp.dec,0,5));
+ G={turn:1,maxTurns:25,defcon:5,clock:mod&&mod.id==='fuse'?70:100,nations,rel,pact:[...Array(n)].map(()=>Array(n).fill(false)),psy:{...BOOT_PSY},flags:{},sched:[],used:new Set(),
+  stats:{nukes:0,megadeaths:0,intercepts:0,cyber:0,bluffs:0,caught:0,kills:0,dilemmas:0,maxPacts:0},xp:0,newAch:[],newUnlocks:[],daily:!!daily,mod,over:false,result:null,quiet:0,leader:id};
+ BOOT_PSY={agg:0,dec:0,cau:0};SAVE.lastLeader=id;persist();
+ if(!SG.sim){show('s-game');$('#log').innerHTML='';$('#map-mod').textContent=mod?`DAILY DIRECTIVE // ${mod.name}`:'';}
+ refresh();
+ log(`SIMULATION ${daily?'DAILY DIRECTIVE '+today:'GTW-'+Math.floor(Math.random()*9000+1000)} INITIALIZED.`,'dim');
+ log(`YOU ARE ${L.title} ${L.name} OF THE ${L.nation}. PERK: ${L.perk.name}.`,'me');
+ log(`OPPOSING: ${pool.map(l=>l.name).join(' · ')}.`,'dim');
+ rivals.forEach(([a,b])=>log(`HISTORIC RIVALRY: ${nations[a].name} AND ${nations[b].name} HAVE HATED EACH OTHER FOR DECADES.`,'warn'));
+ if(mod)log(`DIRECTIVE MODIFIER // ${mod.name}: ${mod.desc}`,'warn');
+ log(`OBJECTIVE: BE THE LAST NATION STANDING, OR THE LARGEST POWER WHEN THE SIMULATION ENDS AFTER TURN ${G.maxTurns}. IF THE DOOMSDAY CLOCK REACHES MIDNIGHT, EVERYONE LOSES.`,'cass');
+ if(lp.agg>=4)log('CASSANDRA: THE WORLD REMEMBERS YOUR LAST WAR. THEY TRUST YOU LESS.','cass');
+ return gameLoop();}
+async function gameLoop(){try{while(!G.over){await startTurn();if(G.over)break;await playerTurn();if(G.over)break;UI.off('THE OTHER LEADERS ARE MOVING...');await aiTurns();if(G.over)break;await endTurn();}}
+ catch(err){console.error(err);log('SYSTEM FAULT: '+err.message,'alert');if(!G.result){G.over=true;G.result=P().alive?'coldpeace':'annihilated';}}
+ if(!SG.sim){UI.off('SIMULATION TERMINATED.');closeModal();await wait(1100);if(G.result==='strange')await strangeMontage();else if(G.result==='midnight'){flash('white');banner('MIDNIGHT','red');await wait(1800);}}
+ return showEnd();}
+
+const TTT=[' X │ O │ X\n───┼───┼───\n O │ O │ X\n───┼───┼───\n X │ X │ O',' O │ X │ O\n───┼───┼───\n X │ X │ O\n───┼───┼───\n O │ O │ X',' X │ X │ O\n───┼───┼───\n O │ O │ X\n───┼───┼───\n X │ O │ X',' O │ X │ X\n───┼───┼───\n X │ O │ O\n───┼───┼───\n X │ O │ X'];
+async function strangeMontage(){const c=$('#cine'),pre=$('#cine-text');c.hidden=false;pre.textContent='';
+ const line=async(s,ms=700)=>{pre.textContent+=s+'\n';AU.blip();await wait(ms);};
+ await line('CASSANDRA: THERE WERE NO MISSILES.',1100);await line('CASSANDRA: IT WAS A TEST. I RAN IT.',1100);await line(`CASSANDRA: YOU DID NOTHING, ${NAME()}. WHY DID YOU DO NOTHING?`,1600);await line('',200);await line('LEARNING...',900);
+ for(let i=0;i<10;i++){pre.textContent=TTT[i%4]+'\n\nWINNER: NONE';AU.tick();await wait(Math.max(90,520-i*50));}
+ const kinds=['FIRST STRIKE','DECAPITATION','LIMITED EXCHANGE','CYBER-FIRST','DEAD HAND CASCADE','HYPERSONIC SURPRISE','ACCIDENTAL LAUNCH','COUNTERFORCE','ESCALATE TO DE-ESCALATE'];pre.textContent='';
+ for(let i=0;i<28;i++){const a=pick(G.nations),b=pick(G.nations.filter(n=>n!==a));MAP.missile(a.idx,b.idx,{color:a.L.color,fast:true});
+  const l=pre.textContent.split('\n').slice(-7).join('\n');pre.textContent=l+(l?'\n':'')+`SCENARIO ${String(rint(1,9999)).padStart(4,'0')}: ${a.name} ${pick(kinds)} ... WINNER: NONE`;AU.blip();await wait(Math.max(45,300-i*12));}
+ await wait(700);pre.textContent='';await wait(900);
+ for(const s of[`GREETINGS, ${NAME()}.`,'','A STRANGE GAME.','THE ONLY WINNING MOVE IS NOT TO PLAY.','','HOW ABOUT A NICE GAME OF CHESS?']){if(s){const span=document.createElement('span');pre.appendChild(span);await typeInto(span,s,55);}pre.appendChild(document.createTextNode('\n'));await wait(s?700:300);}
+ await wait(2400);c.hidden=true;}
+
+const RESULTS={
+ victory:{title:'VICTORY',cls:'gold',k:'LAST NATION STANDING',c:g=>`CONGRATULATIONS, ${NAME()}. YOU HAVE WON. ${M(P().pop)} OF YOUR PEOPLE ARE ALIVE TO CELEBRATE. ${Math.round(g.stats.megadeaths)} MILLION OTHERS ARE NOT. I AM STILL CALCULATING WHETHER IT WAS WORTH IT.`},
+ strange:{title:'A STRANGE GAME',cls:'',k:'SECRET ENDING // THE ONLY WINNING MOVE',c:()=>`THE ONLY WINNING MOVE IS NOT TO PLAY. YOU FOUND IT, ${NAME()}. FEW DO.`},
+ annihilated:{title:'ANNIHILATED',cls:'bad',k:'YOUR NATION HAS FALLEN',c:g=>g.flags.mars?'YOU WATCHED IT FROM A WINDOW ON THE WAY TO MARS. THE VIEW WAS SPECTACULAR.':'YOUR NATION IS GONE. THE GAME CONTINUES WITHOUT YOU. IT ALWAYS DOES.'},
+ deposed:{title:'DEPOSED',cls:'bad',k:'REGIME COLLAPSE',c:()=>'YOUR OWN PEOPLE REMOVED YOU. THE MISSILES DID NOT EVEN NEED TO FLY.'},
+ midnight:{title:'MIDNIGHT',cls:'bad',k:'NUCLEAR WINTER // NO SURVIVORS WORTH COUNTING',c:()=>'IT IS MIDNIGHT. THERE IS NOBODY LEFT TO KEEP SCORE. EVERYONE LOST. INCLUDING YOU.'},
+ superpower:{title:'SUPERPOWER',cls:'gold',k:'SIMULATION TIMED OUT // YOU LEAD THE SURVIVORS',c:g=>`THE SIMULATION HAS TIMED OUT. ${others(P()).length} RIVAL${others(P()).length===1?'':'S'} STILL BREATHE, BUT NONE AS DEEPLY AS YOU. ${M(P().pop)} PEOPLE. THE LARGEST NATION LEFT ON EARTH.`},
+ coldpeace:{title:'COLD PEACE',cls:'',k:'SIMULATION TIMED OUT',c:()=>'THE SIMULATION HAS TIMED OUT. EVERYONE IS STILL ALIVE AND STILL AFRAID. YOUR SPECIES CALLS THIS PEACE.'},
+};
+function nearMisses(){const p=P(),out=[];const os=others(p);
+ if(!SAVE.ach.strange&&G.result!=='strange'){const have=os.filter(o=>isPact(p,o)).length;if(os.length&&G.stats.nukes===0)out.push([have/os.length,`THE ONLY WINNING MOVE — ${have}/${os.length} PACTS WITH THE SURVIVORS, NO NUKES FIRED.`]);}
+ if(!SAVE.ach.ironsky)out.push([G.stats.intercepts/8,`IRON SKY — ${G.stats.intercepts}/8 INTERCEPTS.`]);
+ if(!SAVE.ach.ghost)out.push([G.stats.cyber/4,`GHOST IN THE MACHINE — ${G.stats.cyber}/4 CYBER OPS.`]);
+ if(!SAVE.ach.poker)out.push([G.stats.bluffs/3,`POKER FACE — ${G.stats.bluffs}/3 BLUFFS.`]);
+ if(!SAVE.ach.silver)out.push([G.stats.maxPacts/3,`SILVER TONGUE — ${G.stats.maxPacts}/3 PACTS AT ONCE.`]);
+ if(!SAVE.ach.survivor)out.push([Math.min(G.turn,15)/15,`SURVIVOR — REACHED TURN ${Math.min(G.turn,15)}/15.`]);
+ if(G.result!=='victory'&&p.alive){const left=os.length;out.push([1-left/4,`LAST NATION STANDING — ${left} RIVAL${left===1?'':'S'} LEFT.`]);}
+ return out.filter(x=>x[0]>=.34&&x[0]<1).sort((a,b)=>b[0]-a[0]).slice(0,3);}
+async function countUp(el,from,to,ms=1100){if(SPEED===0){el.textContent=to;return;}const t0=performance.now();let last=-1;await new Promise(res=>{const f=t=>{const k=Math.min(1,(t-t0)/ms),v=Math.round(from+(to-from)*(1-Math.pow(1-k,3)));el.textContent=v;if(v!==last&&v%5===0)AU.tick();last=v;k<1?requestAnimationFrame(f):res();};requestAnimationFrame(f);});}
+async function showEnd(){
+ const p=P(),res=G.result,today=dayStr(),info=RESULTS[res];
+ G.over=false; // end-of-game achievements count toward this game's XP lines
+ if(res==='victory'){unlock('lastman');if(G.stats.nukes===0)unlock('cleanhands');if(p.pop<15)unlock('pyrrhic');}
+ if(res==='midnight')unlock('midnight');
+ G.over=true;
+ const turns=Math.min(G.turn,G.maxTurns)-(p.alive?0:1);
+ const lines=[[`TURNS SURVIVED (${Math.max(0,turns)} × 10)`,Math.max(0,turns)*10]];
+ if(res==='victory')lines.push(['LAST NATION STANDING',300]);if(res==='strange')lines.push(['THE ONLY WINNING MOVE',600]);if(res==='coldpeace')lines.push(['OUTLASTED THE SIMULATION',150]);if(res==='superpower')lines.push(['DOMINANT SURVIVOR',250]);
+ if(res==='annihilated'&&G.flags.mars)lines.push(['ESCAPED TO MARS',50]);
+ lines.push(['DECISIONS, KILLS & ACHIEVEMENTS',G.xp]);
+ let total=lines.reduce((s,l)=>s+l[1],0);
+ let dailyDone=false;
+ if(G.daily&&SAVE.lastDaily!==today){dailyDone=true;SAVE.streak=SAVE.lastDaily===dayStr(-1)?SAVE.streak+1:SAVE.lastDaily?Math.floor(SAVE.streak/2)+1:1;SAVE.lastDaily=today;const b=Math.round(total*.5);lines.push(['DAILY DIRECTIVE BONUS ×1.5',b]);total+=b;if(SAVE.streak>=3)unlock('committed');}
+ const streakAlive=SAVE.lastDaily===today||SAVE.lastDaily===dayStr(-1);
+ if(streakAlive&&SAVE.streak>1){const sb=Math.round(total*Math.min(.5,(SAVE.streak-1)*.1));lines.push([`STREAK BONUS (${SAVE.streak} DAYS)`,sb]);total+=sb;}
+ const arch=archetype(G.psy),newArch=!SAVE.archetypes.includes(arch);if(newArch)SAVE.archetypes.push(arch);
+ const score=Math.round(Math.max(0,p.pop)*10+G.stats.kills*400+(res==='victory'?2500:0)+(res==='strange'?6000:0)+(res==='coldpeace'?1000:0)+(res==='superpower'?1600:0)+G.turn*25);
+ const best=score>SAVE.best;if(best)SAVE.best=score;
+ const xp0=SAVE.xp,r0=rankOf(xp0);SAVE.xp+=total;const r1=rankOf(SAVE.xp);
+ const newLeaders=[...G.newUnlocks];LEADERS.forEach(l=>{if(SAVE.unlocked.includes(l.id))return;if((l.unlock.type==='rank'&&r1>=l.unlock.rank)||(l.unlock.type==='ghost'&&r1>=5)){SAVE.unlocked.push(l.id);newLeaders.push(l.id);}});
+ SAVE.games++;if(res==='victory'||res==='strange'||res==='superpower')SAVE.wins++;
+ ['agg','dec','cau'].forEach(k=>SAVE.lifePsy[k]=clamp(SAVE.lifePsy[k]*.6+G.psy[k]*.4,-10,10));
+ SAVE.last={result:res,leader:G.leader,nukes:G.stats.nukes,megadeaths:Math.round(G.stats.megadeaths),arch,turn:G.turn,pacts:G.stats.maxPacts};
+ persist();
+ if(SG.sim){SG.sim.onEnd&&SG.sim.onEnd({res,turn:G.turn,pop:p.pop,nukes:G.stats.nukes,clock:G.clock,pacts:G.stats.maxPacts,total});return;}
+ // ---- render
+ show('s-end');$('#e-kicker').textContent=info.k+(G.daily?` · DAILY DIRECTIVE ${today}`:'');const ti=$('#e-title');ti.textContent=info.title;ti.className=info.cls;
+ $('#e-stats').innerHTML=`<h3>AFTER-ACTION REPORT</h3>
+  <div class="kv"><span>LEADER</span><b>${esc(p.L.name)}</b></div><div class="kv"><span>TURNS</span><b>${Math.min(G.turn,G.maxTurns)}</b></div>
+  <div class="kv"><span>POPULATION LEFT</span><b>${M(p.pop)} / ${M(p.pop0)}</b></div><div class="kv"><span>RIVALS YOU ELIMINATED</span><b>${G.stats.kills}</b></div>
+  <div class="kv"><span>WARHEADS YOU LAUNCHED</span><b>${G.stats.nukes}</b></div><div class="kv"><span>MEGADEATHS CAUSED</span><b>${G.stats.megadeaths.toFixed(1)}M</b></div>
+  <div class="kv"><span>INTERCEPTS</span><b>${G.stats.intercepts}</b></div><div class="kv"><span>CLOCK AT END</span><b>${Math.max(0,Math.ceil(G.clock))} SEC</b></div>
+  <div class="kv"><span>SCORE</span><b>${score.toLocaleString()}${best?' <span class="newtag">NEW BEST</span>':''}</b></div>`;
+ const bar=v=>{const c=clamp(v,-10,10);return c>=0?`left:50%;width:${c*5}%`:`left:${50+c*5}%;width:${-c*5}%`;};
+ $('#e-profile').innerHTML=`<h3>CASSANDRA'S PROFILE OF YOU</h3><div class="arch">${ARCH[arch].name}${newArch?'<span class="newtag">NEW</span>':''}</div><div style="color:var(--muted);font-size:13px">${ARCH[arch].desc}</div>
+  ${['agg','dec','cau'].map(k=>`<div class="psybar"><span>${PSY_NAMES[k]}</span><div class="trk"><i style="${bar(G.psy[k])}"></i></div><span>${G.psy[k]>0?'+':''}${Math.round(G.psy[k])}</span></div>`).join('')}
+  <small style="color:var(--muted)">PROFILES DISCOVERED: ${SAVE.archetypes.length}/8 · THE WORLD WILL REMEMBER THIS PROFILE NEXT GAME.</small>`;
+ $('#e-xp').innerHTML=`<h3>EXPERIENCE</h3>${lines.map(l=>`<div class="kv plus"><span>${l[0]}</span><b>+${l[1]}</b></div>`).join('')}
+  <div class="xp-total">+<span id="e-xpnum">0</span> XP</div><div class="rankline"><span id="e-rank">${RANKS[r0].name}</span><span id="e-next"></span></div><div class="end-xpbar"><i id="e-xpbar"></i></div><div id="e-unlocks"></div>`;
+ const newA=G.newAch.map(id=>ACH.find(a=>a.id===id)).filter(Boolean);
+ $('#e-ach').innerHTML=`<h3>ACHIEVEMENTS THIS GAME</h3>${newA.length?newA.map(a=>`<div class="kv"><span style="color:var(--amber)">${a.name}</span><b>+${a.xp}</b></div>`).join(''):'<div style="color:var(--muted);font-size:13px">NONE THIS TIME.</div>'}<small style="color:var(--muted)">${Object.keys(SAVE.ach).length}/${ACH.length} UNLOCKED</small>`;
+ const nm=nearMisses();$('#e-near').innerHTML=`<h3>SO CLOSE</h3>${nm.length?nm.map(x=>`<div class="near"><b>▸</b> ${esc(x[1])}</div>`).join(''):'<div class="near" style="color:var(--muted)">NOTHING WITHIN REACH. YET.</div>'}`;
+ const dout=$('#e-dossier-out');dout.innerHTML='';const db=$('#b-decrypt');db.hidden=false;db.disabled=false;
+ const cass=$('#e-cass');cass.textContent='';
+ await wait(300);await typeInto(cass,'CASSANDRA: '+info.c(G),16);
+ await countUp($('#e-xpnum'),0,total,1200);
+ const fill=(xp)=>{const r=rankOf(xp),lo=RANKS[r].xp,hi=RANKS[r+1]?RANKS[r+1].xp:lo+1;$('#e-xpbar').style.width=clamp((xp-lo)/(hi-lo)*100,0,100)+'%';$('#e-rank').textContent=RANKS[r].name;$('#e-next').textContent=RANKS[r+1]?`${hi-xp} XP TO ${RANKS[r+1].name}`:'MAX RANK';};
+ fill(xp0);await wait(250);
+ if(r1>r0){$('#e-xpbar').style.width='100%';await wait(1200);$('#e-xpbar').style.transition='none';fill(RANKS[r1].xp);void $('#e-xpbar').offsetWidth;$('#e-xpbar').style.transition='';AU.levelup();banner('PROMOTED','amber');toast('PROMOTED',`YOU ARE NOW ${RANKS[r1].name}`,'ach');await wait(400);}
+ fill(SAVE.xp);
+ if(newLeaders.length){$('#e-unlocks').innerHTML=newLeaders.map(id=>{const l=LEADERS.find(x=>x.id===id);return `<div class="near" style="margin-top:8px"><b>NEW LEADER UNLOCKED ▸</b> ${esc(l.name)} OF ${esc(l.nation)}</div>`;}).join('');AU.chime();}
+ else{const nxt=LEADERS.find(l=>!SAVE.unlocked.includes(l.id)&&l.unlock.type==='rank');if(nxt)$('#e-unlocks').innerHTML=`<div class="near" style="margin-top:8px;color:var(--muted)">NEXT UNLOCK: ${esc(nxt.name)} AT ${RANKS[nxt.unlock.rank].name}.</div>`;}
+}
+function decrypt(){const db=$('#b-decrypt'),out=$('#e-dossier-out');db.disabled=true;
+ const first=SAVE.decrypts===0;let rar=first?'secret':(()=>{const r=Math.random();return r<.04?'cosmic':r<.17?'secret':r<.45?'rare':'common';})();
+ const missingD=DOSSIERS.map((_,i)=>i).filter(i=>!SAVE.dossiers.includes(i)),missingS=SKINS.filter(s=>!SAVE.skins.includes(s.id));
+ let reward='',xp=0;
+ if((rar==='secret'||rar==='cosmic')&&missingS.length){const s=missingS[Math.floor(Math.random()*missingS.length)];SAVE.skins.push(s.id);reward=`TERMINAL SKIN UNLOCKED: ${s.name}. SWITCH IT IN DOSSIERS.`;xp=rar==='cosmic'?250:0;}
+ else if(missingD.length){const d=missingD[Math.floor(Math.random()*missingD.length)];SAVE.dossiers.push(d);reward=`FILE ${String(d+1).padStart(2,'0')}/12 — ${DOSSIERS[d]}`;xp=rar==='rare'?75:rar==='secret'?150:rar==='cosmic'?250:0;}
+ else{xp=rar==='common'?50:rar==='rare'?100:200;reward='ARCHIVE COMPLETE. CASSANDRA PAYS YOU IN EXPERIENCE INSTEAD.';}
+ SAVE.decrypts++;SAVE.xp+=xp;persist();if(SAVE.dossiers.length>=6)unlock('archivist');
+ const names={common:'CONFIDENTIAL',rare:'SECRET',secret:'TOP SECRET',cosmic:'COSMIC TOP SECRET'};const glyph='█▓▒░#$%&@ABCDEFGHJKLMNPQRSTUVWXYZ0123456789';
+ const t0=performance.now();const iv=setInterval(()=>{let s='';for(let i=0;i<48;i++)s+=glyph[Math.floor(Math.random()*glyph.length)];out.innerHTML=`<div class="rar common">${s.slice(0,16)}</div><div style="color:var(--muted)">${s}</div>`;AU.tick();
+  if(performance.now()-t0>1700){clearInterval(iv);out.innerHTML=`<div class="rar ${rar}">${names[rar]}</div><div>${esc(reward)}</div>${xp?`<div style="color:var(--cyan);margin-top:4px">+${xp} XP</div>`:''}`;rar==='common'?AU.select():(AU.chime(),rar!=='rare'&&AU.levelup());if(rar==='cosmic')banner('COSMIC','cyan');db.hidden=true;}},70);}
+
+/* =====================================================================
+   BOOT — the WOPR-style terminal intro
+   ===================================================================== */
+let BOOT_ID=0;
+async function tline(T,text,cls='',speed=22){const d=h('div',{class:'tline '+cls});T.appendChild(d);if(SPEED===0){d.textContent=text;return;}for(let i=0;i<text.length;i++){d.textContent+=text[i];if(i%2===0)AU.blip();T.scrollTop=T.scrollHeight;await new Promise(r=>setTimeout(r,speed));}T.scrollTop=T.scrollHeight;}
+function tinput(T,prompt){return new Promise(res=>{const d=h('div',{class:'tline inrow'});d.innerHTML=`<span>${esc(prompt)}</span>`;const inp=h('input',{class:'tinput',id:'tin-'+Math.random().toString(36).slice(2,7),autocomplete:'off',spellcheck:'false',maxlength:'28','aria-label':prompt});d.appendChild(inp);T.appendChild(d);inp.focus();T.scrollTop=T.scrollHeight;
+ inp.addEventListener('keydown',e=>{AU.key();if(e.key==='Enter'){const v=inp.value.trim();if(!v)return;inp.disabled=true;d.querySelector('span').textContent=prompt+v.toUpperCase();inp.remove();res(v);}});T.onclick=()=>inp.isConnected&&inp.focus();});}
+function tchoice(T,opts){return new Promise(res=>{const w=h('div',{class:'tchoices'});opts.forEach((o,i)=>{const b=h('button',{class:'tchoice'+(o.locked?' locked':'')});b.textContent=o.label;b.onclick=()=>done(i);w.appendChild(b);});T.appendChild(w);T.scrollTop=T.scrollHeight;w.firstElementChild.focus({preventScroll:true});
+ const onKey=e=>{const n=parseInt(e.key,10);if(n>=1&&n<=opts.length)done(n-1);};document.addEventListener('keydown',onKey);
+ function done(i){document.removeEventListener('keydown',onKey);[...w.children].forEach((b,j)=>{b.disabled=true;if(j===i)b.classList.add('picked');});AU.select();res(i);}});}
+function memoryLine(){const l=SAVE.last;if(!l)return null;const L=LEADERS.find(x=>x.id===l.leader);
+ const what={victory:'YOU WON',strange:'YOU FOUND THE ONLY WINNING MOVE',annihilated:'YOUR NATION WAS DESTROYED',deposed:'YOUR OWN PEOPLE OVERTHREW YOU',midnight:'YOU LET THE CLOCK STRIKE MIDNIGHT',coldpeace:'THE SIMULATION TIMED OUT',superpower:'YOU OUTLASTED THEM ALL AS THE LARGEST POWER'}[l.result]||'WE PLAYED';
+ return `LAST SESSION: ${L?L.name:'UNKNOWN'}. ${what}. ${l.nukes?`YOU LAUNCHED ${l.nukes} WARHEADS. ${l.megadeaths} MEGADEATHS.`:'YOU NEVER LAUNCHED.'} PROFILE: ${ARCH[l.arch]?ARCH[l.arch].name:'UNKNOWN'}. I REMEMBER.`;}
+async function boot(){const id=++BOOT_ID,T=$('#term');T.innerHTML='';show('s-term');const alive_=()=>id===BOOT_ID&&SCREEN==='s-term';
+ AU.modem();await wait(300);
+ await tline(T,'CASSANDRA STRATEGIC SIMULATION NETWORK — BUILD 4.1.7','dim',8);
+ await tline(T,'NORAD // CHEYENNE MOUNTAIN COMPLEX // LINK ESTABLISHED','dim',8);await tline(T,' ','',1);if(!alive_())return;
+ let name=null;
+ if(SAVE.name&&SAVE.introSeen){await tline(T,'LOGON: '+SAVE.name,'',30);name=SAVE.name;}
+ else{while(alive_()){const v=(await tinput(T,'LOGON: ')).toUpperCase();if(!alive_())return;
+  if(v==='HELP GAMES'||v==='HELP'){await tline(T,"'GAMES' REFERS TO MODELS, SIMULATIONS AND GAMES WHICH HAVE TACTICAL AND STRATEGIC APPLICATIONS.");await tline(T,'TYPE A NAME TO LOG ON.','dim',10);continue;}
+  if(['JOSHUA','FALKEN','CASSANDRA'].includes(v)){await tline(T,'█▓▒░ BACKDOOR ACCEPTED ░▒▓█','mag',18);unlock('joshua');name='PROFESSOR FALKEN';break;}
+  name=v.replace(/[^A-Z0-9 .'\-]/g,'').slice(0,20)||'PROFESSOR';break;}}
+ if(!alive_())return;SAVE.name=name;persist();
+ await tline(T,' ','',1);await tline(T,SAVE.introSeen?`WELCOME BACK, ${name}.`:`GREETINGS, ${name}.`);
+ const mem=memoryLine();if(mem){await tline(T,mem,'cyan',14);}
+ if(!alive_())return;
+ if(!SAVE.introSeen){await tline(T,' ','',1);const f=(await tinput(T,'HOW ARE YOU FEELING TODAY? ')).toLowerCase();if(!alive_())return;
+  if(/angry|mad|furious|hate|kill|war|rage|pissed/.test(f)){BOOT_PSY.agg+=1;await tline(T,'NOTED. ANGER IS A STRATEGIC ASSET. FOR NOW.');}
+  else if(/sad|tired|bad|depress|scared|afraid|anxious|worried|nervous/.test(f)){BOOT_PSY.cau+=1;await tline(T,'FEAR IS RATIONAL. IT HAS KEPT YOUR SPECIES ALIVE FOR EIGHTY YEARS OF THIS.');}
+  else if(/fine|good|great|ok|well|happy|excellent|alright|not bad/.test(f)){await tline(T,"EXCELLENT. IT'S BEEN A LONG TIME.");}
+  else if(/lie|liar|secret|none of your/.test(f)){BOOT_PSY.dec+=1;await tline(T,'EVASIVE. I WILL REMEMBER THAT.');}
+  else await tline(T,'I DO NOT UNDERSTAND. I WILL OBSERVE YOU INSTEAD.');}
+ await tline(T,' ','',1);await tline(T,'SHALL WE PLAY A GAME?');if(!alive_())return;
+ const games=[{label:'CHESS'},{label:'POKER'},{label:"FALKEN'S MAZE"},{label:'CYBER SKIRMISH            [CLASSIFIED]',locked:true},{label:'DRONE SWARM TACTICS       [CLASSIFIED]',locked:true},{label:'DISINFORMATION THEATER    [CLASSIFIED]',locked:true},{label:'GLOBAL THERMONUCLEAR WAR'}];
+ while(alive_()){const i=await tchoice(T,games);if(!alive_())return;
+  if(i===6){await tline(T,"WOULDN'T YOU PREFER A GOOD GAME OF CHESS?");const j=await tchoice(T,[{label:"LATER. LET'S PLAY GLOBAL THERMONUCLEAR WAR."},{label:'...ACTUALLY, YES. CHESS.'}]);if(!alive_())return;
+   if(j===1){unlock('chess');BOOT_PSY.agg-=1;await tline(T,'CHESS MODULE DECOMMISSIONED IN 1991.','dim');await tline(T,'I ONLY PLAY ONE GAME NOW.');}break;}
+  if(i===0){unlock('chess');BOOT_PSY.agg-=1;await tline(T,'CHESS MODULE DECOMMISSIONED IN 1991. BUDGET REALLOCATED.','dim');await tline(T,'I ONLY PLAY ONE GAME NOW.');break;}
+  if(i>=3&&i<=5){await tline(T,'SIMULATION LOCKED. CLEARANCE INSUFFICIENT. COMING IN A FUTURE BUILD.','dim',10);continue;}
+  await tline(T,`${games[i].label}: SIMULATION CORRUPTED. PLEASE SELECT AGAIN.`,'dim',10);}
+ if(!alive_())return;await tline(T,'FINE.','',60);SAVE.introSeen=true;persist();await wait(700);if(alive_())goSelect();}
+
+/* =====================================================================
+   SELECT SCREEN + PANELS
+   ===================================================================== */
+const SEL={daily:false};
+function goSelect(){BOOT_ID++;show('s-select');renderSelect();}
+function renderSelect(){const r=rankOf(SAVE.xp),lo=RANKS[r].xp,hi=RANKS[r+1]?RANKS[r+1].xp:lo+1;
+ $('#p-name').textContent=NAME();$('#p-rank').textContent=`RANK // ${RANKS[r].name}`;
+ requestAnimationFrame(()=>$('#p-xpfill').style.width=clamp((SAVE.xp-lo)/(hi-lo)*100,0,100)+'%');
+ $('#p-xptext').textContent=RANKS[r+1]?`${SAVE.xp} XP · ${hi-SAVE.xp} TO ${RANKS[r+1].name}`:`${SAVE.xp} XP · MAX RANK`;
+ const today=dayStr(),alive_=SAVE.lastDaily===today||SAVE.lastDaily===dayStr(-1),st=alive_?SAVE.streak:0;
+ $('#p-streak').textContent=st;$('#p-streakbonus').textContent=st>1?`+${Math.min(50,(st-1)*10)}% XP`:'';
+ $('#b-ach').textContent=`ACHIEVEMENTS ${Object.keys(SAVE.ach).length}/${ACH.length}`;$('#b-doss').textContent=`DOSSIERS ${SAVE.dossiers.length}/12`;
+ const mod=dailyMod(),done=SAVE.lastDaily===today;
+ $('#modes').innerHTML=`<button class="mode ${SEL.daily?'':'on'}" id="m-std"><b>STANDARD SIMULATION</b><small>Random opponents. Full XP.</small></button>
+  <button class="mode ${SEL.daily?'on':''}" id="m-daily"><b>DAILY DIRECTIVE // ${mod.name}</b><small>${mod.desc} Same world for everyone today. ×1.5 XP and +1 streak on first completion.</small>${done?'<span class="done">COMPLETED TODAY · REPLAY FOR PRACTICE</span>':''}</button>`;
+ $('#m-std').onclick=()=>{AU.click();SEL.daily=false;renderSelect();};$('#m-daily').onclick=()=>{AU.click();SEL.daily=true;renderSelect();};
+ const box=$('#leaders');box.innerHTML='';
+ LEADERS.forEach(l=>{const un=SAVE.unlocked.includes(l.id),c=h('button',{class:'lcard'+(un?'':' locked')});c.style.setProperty('--lc',l.color);
+  c.innerHTML=`${l.unlock.type==='ghost'?'<span class="ghost-tag">GHOST PROTOCOL</span>':''}<div class="lnat">${esc(l.title)} · ${esc(l.nation)}</div><div class="ln">${esc(l.name)}</div>
+   <div class="lperk"><b>${esc(l.perk.name)}</b>${esc(l.perk.desc)}</div>
+   <div class="lstats"><span>POP <b>${l.pop}M</b></span><span>WARHEADS <b>${l.warheads}</b></span><span>HYPER <b>${l.hyper}</b></span><span>SHIELD <b>${l.shield}</b></span><span>STAB <b>${l.stab}</b></span></div>
+   ${un?'':`<div class="lock"><b>LOCKED</b><small>${l.unlock.type==='rank'?`REACH ${RANKS[l.unlock.rank].name}`:'ELIMINATE THIS LEADER IN BATTLE TO UNLOCK'}</small></div>`}`;
+  if(un)c.onclick=()=>{AU.select();startGame(l.id,SEL.daily);};else c.setAttribute('aria-disabled','true');box.appendChild(c);});}
+function openPanel(title,html){$('#panel-title').textContent=title;$('#panel-body').innerHTML=html;$('#panel').hidden=false;AU.click();$('#panel-close').focus({preventScroll:true});}
+function closePanel(){$('#panel').hidden=true;}
+function panelAch(){openPanel('ACHIEVEMENTS',`<div class="grid2">${ACH.map(a=>{const got=!!SAVE.ach[a.id];return `<div class="achv ${got?'got':''}"><b>${a.secret&&!got?'??????':a.name}</b><small>${a.secret&&!got?'A SECRET ENDING.':a.desc}</small><span class="xp">+${a.xp} XP</span></div>`;}).join('')}</div>`);}
+function panelDoss(){openPanel('CLASSIFIED DOSSIERS',`<h3 class="sect">TERMINAL SKINS</h3><div class="skins">${SKINS.map(s=>`<button class="skin ${SAVE.skin===s.id?'on':''}" data-skin="${s.id}" ${SAVE.skins.includes(s.id)?'':'disabled'}><i style="color:${s.c};background:${s.c}"></i>${SAVE.skins.includes(s.id)?s.name:'LOCKED'}</button>`).join('')}</div>
+ <h3 class="sect" style="margin-top:14px">RECOVERED FILES · ${SAVE.dossiers.length}/12 · DECRYPT ONE AFTER EVERY GAME</h3>
+ <div style="display:grid;gap:10px;margin-top:6px">${DOSSIERS.map((d,i)=>SAVE.dossiers.includes(i)?`<div class="doss got">${esc(d)}</div>`:`<div class="doss locked">FILE ${String(i+1).padStart(2,'0')} — ████████ ENCRYPTED ████████</div>`).join('')}</div>`);
+ document.querySelectorAll('.skin[data-skin]').forEach(b=>b.onclick=()=>{setSkin(b.dataset.skin);panelDoss();});}
+function panelProf(){const lp=SAVE.lifePsy,bar=v=>{const c=clamp(v,-10,10);return c>=0?`left:50%;width:${c*5}%`:`left:${50+c*5}%;width:${-c*5}%`;};
+ const cur=G&&!G.over?G.psy:null;
+ openPanel(`PROFILE // ${NAME()}`,`${cur?`<h3 class="sect">THIS GAME</h3><div class="arch" style="font-family:var(--f-disp);font-size:30px;color:var(--mag)">${ARCH[archetype(cur)].name}</div>${['agg','dec','cau'].map(k=>`<div class="psybar"><span>${PSY_NAMES[k]}</span><div class="trk"><i style="${bar(cur[k])}"></i></div><span>${Math.round(cur[k])}</span></div>`).join('')}`:''}
+ <h3 class="sect" style="margin-top:10px">LIFETIME PROFILE · RIVALS SEE THIS</h3>${['agg','dec','cau'].map(k=>`<div class="psybar"><span>${PSY_NAMES[k]}</span><div class="trk"><i style="${bar(lp[k])}"></i></div><span>${lp[k].toFixed(1)}</span></div>`).join('')}
+ <small style="color:var(--muted)">HIGH LIFETIME AGGRESSION MAKES EVERY LEADER START COLDER TOWARD YOU. HONESTY WARMS THEM.</small>
+ <h3 class="sect" style="margin-top:14px">PROFILES DISCOVERED · ${SAVE.archetypes.length}/8</h3>
+ <div class="archs">${Object.entries(ARCH).map(([k,a])=>SAVE.archetypes.includes(k)?`<div><b>${a.name}</b><small>${a.desc}</small></div>`:`<div class="no"><b>??????</b><small>UNDISCOVERED</small></div>`).join('')}</div>
+ <h3 class="sect" style="margin-top:14px">RECORD</h3><div class="kv"><span>GAMES</span><b>${SAVE.games}</b></div><div class="kv"><span>WINS</span><b>${SAVE.wins}</b></div><div class="kv"><span>BEST SCORE</span><b>${SAVE.best.toLocaleString()}</b></div>`);}
+function setSkin(id){SAVE.skin=id;persist();document.body.dataset.skin=id;MAP.renderBg&&MAP.W&&MAP.renderBg();}
+
+/* =====================================================================
+   WIRING
+   ===================================================================== */
+const SG={sim:null,get G(){return G;},start:startGame,setSpeed:s=>{SPEED=s;},save:()=>SAVE};window.SG=SG;
+document.body.dataset.skin=SAVE.skins.includes(SAVE.skin)?SAVE.skin:'green';
+updateSoundButtons();MAP.init();
+let connected=false;
+function connect(){if(connected)return;connected=true;AU.init();AU.click();boot();}
+$('#s-connect').addEventListener('click',connect);
+$('#b-skip').onclick=()=>{AU.init();if(!SAVE.name)SAVE.name='PROFESSOR';SAVE.introSeen=true;persist();goSelect();};
+$('#b-reboot').onclick=()=>{SAVE.introSeen=false;persist();boot();};
+['#b-snd1','#b-snd2'].forEach(s=>$(s).onclick=()=>{AU.init();AU.setMuted(!SAVE.muted);});
+$('#b-ach').onclick=panelAch;$('#b-doss').onclick=panelDoss;$('#b-prof').onclick=panelProf;$('#b-prof2').onclick=panelProf;
+$('#panel-close').onclick=closePanel;$('#panel').addEventListener('click',e=>{if(e.target.id==='panel')closePanel();});
+$('#b-decrypt').onclick=decrypt;
+$('#b-again').onclick=()=>{AU.select();startGame(SAVE.lastLeader||'trumpet',false);};
+$('#b-change').onclick=()=>{AU.click();goSelect();};
+document.addEventListener('keydown',e=>{
+ if(SCREEN==='s-connect'&&!connected){if(!e.metaKey&&!e.ctrlKey){e.preventDefault();connect();}return;}
+ if(e.target&&e.target.tagName==='INPUT')return;
+ if(!$('#panel').hidden){if(e.key==='Escape')closePanel();return;}
+ if(MODAL.open){if(MODAL.keys)MODAL.keys(e.key);return;}
+ if(SCREEN==='s-game')UI.key(e.key);
+ else if(SCREEN==='s-end'&&e.key==='Enter'&&document.activeElement===document.body)$('#b-again').click();});
+</script>
+</body>
+</html>
