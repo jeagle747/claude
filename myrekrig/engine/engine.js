@@ -19,6 +19,13 @@ const MapSizeMax = 200;
 const TimeRate = 10;
 const LastFoodMem = 42;
 const BasePlaceTries = 10000;
+// The original copies the brains of the ants on a square into one scratch
+// buffer (AntTemp) shared by all teams; slots past the last brain keep stale
+// bytes from earlier calls of any team. Some ants read one or more slots past
+// the end (e.g. Inkal), so the engine keeps the same shared buffer and shows
+// the ant this many extra slots of it.
+const StaleSlots = 8;
+const AntDataSize = 28; // sizeof(struct AntData) on 32-bit x86
 
 // SysCheck() codes (what the viewer can ask for after a turn).
 export const SYS = { CONTINUE: 0, SKIP: 1, INTERRUPT: 2, EXIT: 3, RESTART: 4, MAKELAST: 5 };
@@ -188,6 +195,10 @@ export class Game {
     // Brain storage: every ant slot has room for the largest brain, and at
     // least 4 bytes for the random start value (§3.9).
     this.stride = Math.max(4, largestMem);
+    // The shared scratch buffer, as large as the original's (calloc'ed once
+    // per game, so it persists between battles).
+    const antMem = largestMem <= 4 ? AntDataSize : AntDataSize - 4 + largestMem;
+    this.antTemp = new Uint8Array(255 * antMem);
 
     this.BattleSeed = 0;
     this.Used = {};
@@ -452,18 +463,18 @@ export class Game {
     this.fillSquare(felt, 16, up, shuffle, row);
 
     // Copy in the brains: the caller first, then the others on the square in
-    // square-list order (num - 1 of them).
-    const brains = this.brains, stride = this.stride, mem = runner.mem;
+    // square-list order (num - 1 of them), via the shared scratch buffer.
+    const brains = this.brains, stride = this.stride, mem = runner.mem, temp = this.antTemp;
     let n = 1;
+    const extent = Math.min(mem.length, temp.length, (num + StaleSlots) * size);
     if (size) {
-      mem.set(brains.subarray(ant * stride, ant * stride + size), 0);
+      temp.set(brains.subarray(ant * stride, ant * stride + size), 0);
       for (let a = this.sqFirst[sq]; a !== -1 && n < num; a = this.aNext[a]) {
         if (a === ant) continue;
-        mem.set(brains.subarray(a * stride, a * stride + size), n * size);
+        temp.set(brains.subarray(a * stride, a * stride + size), n * size);
         n++;
       }
-    } else {
-      n = num;
+      mem.set(temp.subarray(0, extent), 0);
     }
 
     let retval;
@@ -476,13 +487,14 @@ export class Game {
       retval = runner.call(num);
     }
 
-    // Copy the brains back.
+    // Copy the brains back (and whatever the ant wrote past them).
     if (size) {
-      brains.set(mem.subarray(0, size), ant * stride);
+      temp.set(mem.subarray(0, extent), 0);
+      brains.set(temp.subarray(0, size), ant * stride);
       n = 1;
       for (let a = this.sqFirst[sq]; a !== -1 && n < num; a = this.aNext[a]) {
         if (a === ant) continue;
-        brains.set(mem.subarray(n * size, n * size + size), a * stride);
+        brains.set(temp.subarray(n * size, n * size + size), a * stride);
         n++;
       }
     }

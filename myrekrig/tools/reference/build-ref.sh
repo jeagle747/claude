@@ -22,7 +22,7 @@ mkdir -p "$CACHE"
 if [ ! -d "$REPO" ]; then
   git clone -q https://github.com/einar-io/Myrekrig-2011 "$REPO"
 fi
-git -C "$REPO" checkout -q "$COMMIT"
+[ "$(git -C "$REPO" rev-parse HEAD)" = "$COMMIT" ] || git -C "$REPO" checkout -q "$COMMIT"
 
 # Prepare sources: 2003 semantics means u_long is a 32-bit unsigned long.
 if [ ! -f "$SRC/.ready" ]; then
@@ -35,7 +35,7 @@ if [ ! -f "$SRC/.ready" ]; then
 fi
 cp "$HERE/MK_Trace.c" "$SRC/MK_Trace.c"
 
-CFLAGS="-m32 -fno-pic -fno-strict-aliasing -std=gnu89 -fgnu89-inline -fsigned-char -DNDEBUG -O2 -w -I$SRC"
+CFLAGS="-m32 -msse2 -mfpmath=sse -fno-pic -fno-strict-aliasing -fwrapv -std=gnu89 -fgnu89-inline -fsigned-char -DNDEBUG -O2 -w -I$SRC"
 mkdir -p "$OBJ"
 
 # Ant objects are cached; the ant list only changes MyreHold.c.

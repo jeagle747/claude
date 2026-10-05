@@ -15,7 +15,25 @@ export function patchAntSource(text) {
     .replace(/^([ \t]*)(?:inline[ \t]+static|static[ \t]+inline)[ \t]+/gm, "$1inline ")
     // Old GCC "cast as lvalue" extension: `(unsigned int)i>>=1;`
     .replace(/\(unsigned int\)(\w+)\s*>>=\s*1;/g, "$1 = (unsigned int)$1 >> 1;");
-  return addFallOffReturns(text);
+  return addFallOffReturns(applyAntFixes(text));
+}
+
+// Fixes for undefined behaviour in specific historic ants. Each fix makes the
+// code do explicitly what 32-bit x86 (the original platform) did.
+const ANT_FIXES = [
+  {
+    // Smiley: RAND_INT(m,f,l,h) converts a float to unsigned short. With l > h
+    // (e.g. RAND_INT(..., XT, XT*1.10) for negative XT) the float is negative,
+    // which is undefined in C. x86 converts to a 32-bit int and keeps the low
+    // 16 bits; WebAssembly saturates to 0. Make the x86 behaviour explicit.
+    find: "#define RAND_INT(m,f,l,h) (((unsigned short)(SmileyRandom(m,f)",
+    replace: "#define RAND_INT(m,f,l,h) (((unsigned short)(int)(SmileyRandom(m,f)",
+  },
+];
+
+function applyAntFixes(text) {
+  for (const fix of ANT_FIXES) text = text.split(fix.find).join(fix.replace);
+  return text;
 }
 
 // A non-void function that reaches its closing brace without `return`

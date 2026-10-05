@@ -6,35 +6,30 @@ const FNV_PRIME = 16777619;
 
 export function traceLine(game) {
   const P = FNV_PRIME;
-  let h = FNV_OFFSET;
+  let h = FNV_OFFSET, h2 = FNV_OFFSET; // h2: the same without brain bytes
   const { sqAnts, sqBase, sqTeam, sqFood, antList, aTeam, aX, aY, aAge, brains, stride, sqFirst, aNext } = game;
   const N = game.W * game.H;
+  const both = (b) => { h = Math.imul(h ^ b, P); h2 = Math.imul(h2 ^ b, P); };
   for (let i = 0; i < N; i++) {
-    h = Math.imul(h ^ sqAnts[i], P);
-    h = Math.imul(h ^ sqBase[i], P);
-    h = Math.imul(h ^ sqTeam[i], P);
-    h = Math.imul(h ^ sqFood[i], P);
+    both(sqAnts[i]); both(sqBase[i]); both(sqTeam[i]); both(sqFood[i]);
   }
   for (let i = 0; i < game.NumAnts; i++) {
     const a = antList[i], t = aTeam[a], size = game.team[t].memSize, o = a * stride;
     const x = aX[a], y = aY[a], age = aAge[a];
-    h = Math.imul(h ^ (x & 0xff), P); h = Math.imul(h ^ (x >>> 8), P);
-    h = Math.imul(h ^ (y & 0xff), P); h = Math.imul(h ^ (y >>> 8), P);
-    h = Math.imul(h ^ t, P);
-    h = Math.imul(h ^ (age & 0xff), P); h = Math.imul(h ^ ((age >>> 8) & 0xff), P);
-    h = Math.imul(h ^ ((age >>> 16) & 0xff), P); h = Math.imul(h ^ (age >>> 24), P);
+    both(x & 0xff); both(x >>> 8); both(y & 0xff); both(y >>> 8); both(t);
+    both(age & 0xff); both((age >>> 8) & 0xff); both((age >>> 16) & 0xff); both(age >>> 24);
     for (let m = 0; m < size; m++) h = Math.imul(h ^ brains[o + m], P);
   }
   for (let i = 0; i < N; i++) {
     if (sqAnts[i]) {
       for (let a = sqFirst[i]; a !== -1; a = aNext[a]) {
         const age = aAge[a];
-        h = Math.imul(h ^ (age & 0xff), P); h = Math.imul(h ^ ((age >>> 8) & 0xff), P);
-        h = Math.imul(h ^ ((age >>> 16) & 0xff), P); h = Math.imul(h ^ (age >>> 24), P);
+        both(age & 0xff); both((age >>> 8) & 0xff); both((age >>> 16) & 0xff); both(age >>> 24);
       }
     }
   }
-  return `${game.BattleCount + 1} ${game.CurrentTurn} ${game.NumAnts} ${game.NumFood} ${game.NumBases} ${(h >>> 0).toString(16).padStart(8, "0")}\n`;
+  const hex = (v) => (v >>> 0).toString(16).padStart(8, "0");
+  return `${game.BattleCount + 1} ${game.CurrentTurn} ${game.NumAnts} ${game.NumFood} ${game.NumBases} ${hex(h)} ${hex(h2)}\n`;
 }
 
 // Full state dump, same format as mk_dump() in MK_Trace.c (for debugging).

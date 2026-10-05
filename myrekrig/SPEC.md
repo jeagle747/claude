@@ -262,6 +262,12 @@ it places one pile and checks again:
    - `mem[1..n−1]` are the others, in square-list order, with the caller skipped.
 
    It may read and write all of them. Changes are kept.
+
+   The brains pass through one scratch buffer shared by all teams, as in the original
+   (`AntTemp`, 255 × the brain slot size, kept for the whole game). Slots past the last brain
+   still hold bytes from earlier calls of any team. Some ants read past the end by mistake
+   (Inkal reads `m[NumAnts]`), so the engine shows each ant 8 slots of that buffer beyond its own
+   brains, with exactly the bytes the original would have shown.
 5. The ant's age is increased by 1.
 
 ### 3.11 Team relabel table
@@ -478,6 +484,15 @@ Brain fields behave like the C types:
   - A helper function named `main` is renamed. Affected: Cascade.
   - Both builds use `-fno-strict-aliasing`. The original `Myre.h` copies brains through a
     pointer of a different type, which modern optimizers may miscompile otherwise.
+  - Both builds use `-fwrapv`: signed integer overflow wraps around, as it did on 2003-era
+    compilers. Several ants' random generators rely on it (e.g. Skak), and modern optimizers
+    otherwise assume it never happens.
+  - Floating point is IEEE single/double precision in both builds, which is what WebAssembly
+    provides. The original 32-bit x86 builds used the x87 unit's 80-bit intermediate precision,
+    so ants that use `float`/`double` (Caesar, FirkAnt, GridAnt, Smiley) may round differently
+    from 2003 in rare cases.
+  - Smiley converts a negative `float` to `unsigned short`, which is undefined. The fix writes
+    out what x86 did: convert to `int` first, then keep the low 16 bits.
   - **Functions that end without `return`** now return 0.
     - In C the result of such a function is whatever value happens to be in a register, so it
       differs between compilers. The 2003 binaries, today's GCC and WebAssembly all gave
@@ -662,6 +677,9 @@ myrekrig/
      With about 194 or more ants on one base it reads past the table. Normal settings never reach
      that; the test matrix leaves Legions out of its 250-start-ants case.
    - Food piles of size 0 (`m0 d0`) make food placement loop forever, in the original too.
+   - NewDesert stores memory addresses (pointers) in its brain. It recreates them before use, so
+     the game plays identically, but the stored bytes differ between builds. For NewDesert the
+     comparison leaves brain bytes out; everything else is compared.
 
 ---
 

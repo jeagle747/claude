@@ -6,13 +6,15 @@
  * logic is untouched. The JS engine writes the same trace, so the two can be
  * compared turn by turn.
  *
- * Trace line:  <battle> <turn> <ants> <food> <bases> <hash>
+ * Trace line:  <battle> <turn> <ants> <food> <bases> <hash> <hash2>
  * The hash (FNV-1a, 32 bit) covers, in order:
  *   1. every square in index order (x + y*W): NumAnts, Base, Team, NumFood
  *   2. every ant in global ant-list order: XPos, YPos (16-bit LE), Team,
  *      Age (32-bit LE), then the first MemSize bytes of its brain
  *   3. every square with ants, in index order: the Age (32-bit LE) of each
  *      ant in square-list order
+ * hash2 is the same without the brain bytes (for ants that store pointers
+ * in their brains, whose values differ between builds).
  */
 
 #include <stdio.h>
@@ -25,12 +27,13 @@ static unsigned int every = 1;
 #define FNV_OFFSET 2166136261u
 #define FNV_PRIME 16777619u
 
-static unsigned int h;
+static unsigned int h, h2;
 static int dump_battle = -1;
 static unsigned long dump_turn = 0;
 void mk_dump(void);
 
-static void hb(unsigned int b) { h = (h ^ (b & 0xff)) * FNV_PRIME; }
+static void hb(unsigned int b) { h = (h ^ (b & 0xff)) * FNV_PRIME; h2 = (h2 ^ (b & 0xff)) * FNV_PRIME; }
+static void hb1(unsigned int b) { h = (h ^ (b & 0xff)) * FNV_PRIME; }
 static void h16(unsigned int v) { hb(v); hb(v >> 8); }
 static void h32(unsigned int v) { hb(v); hb(v >> 8); hb(v >> 16); hb(v >> 24); }
 
@@ -49,7 +52,7 @@ void SysDrawMap(void) {
    unsigned long i, n;
    if (BattleCount + 1 == dump_battle && CurrentTurn == dump_turn) mk_dump();
    if (every == 0 || CurrentTurn % every != 0) return;
-   h = FNV_OFFSET;
+   h = h2 = FNV_OFFSET;
    n = Used.MapWidth * Used.MapHeight;
    for (i = 0 ; i < n ; i++) {
       hb(MapDatas[i].NumAnts); hb(MapDatas[i].Base);
@@ -59,7 +62,7 @@ void SysDrawMap(void) {
       struct AntData *a = AntList[i];
       int m, size = TeamDatas[a->Team].MemSize;
       h16(a->XPos); h16(a->YPos); hb(a->Team); h32((unsigned int) a->Age);
-      for (m = 0 ; m < size ; m++) hb(((unsigned char *) a->Mem)[m]);
+      for (m = 0 ; m < size ; m++) hb1(((unsigned char *) a->Mem)[m]);
    }
    for (i = 0 ; i < n ; i++) {
       if (MapDatas[i].NumAnts) {
@@ -68,8 +71,8 @@ void SysDrawMap(void) {
          while (a != end) { h32((unsigned int) a->Age); a = a->MapNext; }
       }
    }
-   fprintf(trace, "%d %lu %lu %lu %lu %08x\n", BattleCount + 1, (unsigned long) CurrentTurn,
-           (unsigned long) NumAnts, (unsigned long) NumFood, (unsigned long) NumBases, h);
+   fprintf(trace, "%d %lu %lu %lu %lu %08x %08x\n", BattleCount + 1, (unsigned long) CurrentTurn,
+           (unsigned long) NumAnts, (unsigned long) NumFood, (unsigned long) NumBases, h, h2);
 }
 
 int SysCheck(void) { return 0; }

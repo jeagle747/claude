@@ -79,6 +79,12 @@ add("edge", yours, ["n4", "b1", "B3", "s6"]);                     // varying bat
 add("edge", ["SkyNET", "Legions", "Rambo"], ["n3", "z2", "s7"]);   // watch team
 add("edge", yours, ["n2", "m1", "d0", "s8"]);                     // 1-food piles (m0 d0 hangs, as in the original)
 
+// Ants that store pointers in their brains: the pointer values depend on
+// where memory lives, so their brain bytes are left out of the comparison
+// (the trace's second checksum). Everything else is still compared.
+const POINTER_ANTS = ["NewDesert"];
+const withoutBrains = (trace) => trace.replace(/ [0-9a-f]{8} ([0-9a-f]{8})$/gm, " $1");
+
 // --- Running ----------------------------------------------------------------
 
 function runJs(ants, args, every) {
@@ -133,7 +139,8 @@ for (const [i, c] of configs.entries()) {
     const ref = runRef(c.ants, c.args, i, c.every);
     const js = runJs(c.ants, c.args, c.every);
     const dOut = firstDiff(mask(ref.out), mask(js.out));
-    const dTrace = firstDiff(ref.trace, js.trace);
+    const pointers = c.ants.some((a) => POINTER_ANTS.includes(a));
+    const dTrace = pointers ? firstDiff(withoutBrains(ref.trace), withoutBrains(js.trace)) : firstDiff(ref.trace, js.trace);
     turns += ref.trace.split("\n").length - 1;
     if (!dOut && !dTrace) {
       passed++;
