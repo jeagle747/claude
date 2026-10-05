@@ -468,6 +468,22 @@ Brain fields behave like the C types:
     report each ant's brain size so these cases can be checked.
 - **Per call**, the engine copies the brains into the module's memory, calls the function, and
   copies them back. This is exactly what the original did.
+- **Compatibility fixes** (`tools/ant-compat.mjs`). Some 2002–2003 sources need small, mechanical
+  fixes to build with today's compilers. The same fixes are applied to the reference (native)
+  build and the WebAssembly build, so both compile identical code:
+  - A `static` helper function called before it is declared: `static` is dropped. Old GCC
+    accepted this order; modern compilers reject it. Affected: Legions, SkyNET, Equalizer.
+  - The old GCC "cast as lvalue" form `(unsigned int)i >>= 1` is written out as
+    `i = (unsigned int)i >> 1`. Affected: NewDesert.
+  - A helper function named `main` is renamed. Affected: Cascade.
+  - **Functions that end without `return`** now return 0.
+    - In C the result of such a function is whatever value happens to be in a register, so it
+      differs between compilers. The 2003 binaries, today's GCC and WebAssembly all gave
+      different answers.
+    - This actually happens in Legions (3 functions) and SkyNET (2 functions). Example:
+      Legions' `lgtnp()` returns nothing when the ant is already at its target.
+    - The 2003 value cannot be recovered. Returning 0 makes the ants behave the same in every
+      build, but possibly not exactly as in 2003.
 - **C library.** The ants use a small set of library calls, provided by a minimal built-in C
   library:
   - `printf`/`fprintf` → shown in a debug console, off by default;
@@ -637,8 +653,13 @@ myrekrig/
 6. **Known limits.**
    - The reference is a modern compiler build, not the 2003 binary. The only known
      compiler-dependent detail is §3.9.
-   - Some historic ants did not compile in the 2011 fork. The build will list them, and we can
-     decide whether to patch them.
+   - Some historic ants did not compile in the 2011 fork. All 52 now compile, with the
+     mechanical fixes listed in §4.3.
+   - Remaining undefined behaviour in ant code can still make builds differ. Known case:
+     Legions fills `xs[0..48]` of an `xs[50]` table but indexes it with `(ants on square + 2) / 4`.
+     With about 194 or more ants on one base it reads past the table. Normal settings never reach
+     that; the test matrix leaves Legions out of its 250-start-ants case.
+   - Food piles of size 0 (`m0 d0`) make food placement loop forever, in the original too.
 
 ---
 
