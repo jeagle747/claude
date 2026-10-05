@@ -1,27 +1,32 @@
 # MyreKrig JS — Proof-of-Concept Specification
 
-**Status:** Draft 1, for review. Nothing is built yet.
+**Status:** Draft 2. All open questions from draft 1 are answered (§11). Nothing is built yet.
 **Scope:** A browser-only re-creation of MyreKrig that runs on a Chromebook, can run the
 historic C ant races, and reproduces the original engine's behaviour closely enough that
 someone who knows the game can confirm it plays the same.
-
-Open questions are marked **[Q1]**, **[Q2]** … and collected in §11.
 
 ---
 
 ## 1. Goals and non-goals
 
 ### Goals
-1. **Faithful rules.** Implement the rules of MyreKrig **v2.4.7 (26.06.03)** by Aske Simon
-   Christensen exactly, including the random-number generator. A battle started with the same
-   seed, parameters and ants should play out identically to the original engine (see §7).
-2. **Runs in a browser.** Plain Chrome on a Chromebook. No installation, no server and no build
+1. **Faithful rules.** Implement the MyreKrig rules by Aske Simon Christensen exactly, including
+   the random-number generator.
+   - Source versions: **v2.4.6 (07.03.03)**, the copy from the time, and **v2.4.7 (26.06.03)**,
+     from the 2011 GitHub fork.
+   - These two **play identically.** 2.4.7 only changed how CPU time and some internal food
+     statistics are counted, and neither affects a battle.
+   - A battle started with the same seed, parameters and ants plays out identically to the
+     original engine (see §7).
+2. **Reproducible.** The same seed, parameters and ant list always give the same battles and the
+   same results table, apart from the measured CPU-time columns (§8).
+3. **Runs in a browser.** Plain Chrome on a Chromebook. No installation, no server and no build
    step for the person using it.
-3. **Runs the historic ants.** The C ants from the original tournament run unmodified, compiled
+4. **Runs the historic ants.** The C ants from the original tournament run unmodified, compiled
    to WebAssembly.
-4. **Lets you write new ants in JavaScript**, directly in the browser.
-5. **Watch and measure.** Includes a live battle viewer and a tournament mode that prints the
-   same results table as the original.
+5. **Lets you write new ants in JavaScript**, directly in the browser.
+6. **Watch and measure.** A battle viewer modelled on the original X11/Windows viewer, and a
+   tournament mode that prints the same results table as the original.
 
 ### Non-goals for the proof of concept
 - Server, uploads, accounts, scheduled tournaments, public leaderboard.
@@ -37,7 +42,7 @@ Open questions are marked **[Q1]**, **[Q2]** … and collected in §11.
 ┌──────────────────────── single HTML file ────────────────────────┐
 │ Main thread (UI)                     Web Worker (simulation)      │
 │  - setup screen (ants, params, seed)  - game engine (JS)          │
-│  - canvas battle viewer     ◄──────►  - JS ants                   │
+│  - battle viewer + graph    ◄──────►  - JS ants                   │
 │  - tournament results table   msgs    - C ants (WebAssembly)      │
 │  - JS ant editor                                                  │
 └───────────────────────────────────────────────────────────────────┘
@@ -45,16 +50,16 @@ Open questions are marked **[Q1]**, **[Q2]** … and collected in §11.
 
 - **Engine in a Web Worker.** This keeps the page responsive, and a runaway ant can be stopped by
   terminating the worker.
-- **The viewer** receives map changes (dirty squares) and draws them on a canvas. For speed, many
-  turns are simulated per animation frame.
+- **The viewer** receives map changes and draws them on a canvas. For speed, many turns are
+  simulated per animation frame.
 - **Delivered as one self-contained HTML file.** The worker and WebAssembly ants are embedded
-  inline. The file then opens straight from the Chromebook's Files app, the same way the
-  repository's existing `index.html` does. A build script (run by Claude/CI, not by the user)
-  produces that file from the sources. Hosting alternatives are in §9.
+  inline.
+  - You download it and open it in Chrome from the Chromebook's Files app. It also works offline.
+  - A build script (run by Claude/CI, not by you) produces the file from the sources.
 
 ---
 
-## 3. Game rules (classic, v2.4.7)
+## 3. Game rules (classic)
 
 This section is the authoritative description of the rules for the new engine. It describes
 behaviour, not code.
@@ -96,8 +101,8 @@ Each battle draws every parameter uniformly from `[min, max]`.
 **Validation.** If BattleSizeMax is 0 or greater than the number of teams, it is set to the
 number of teams. If BattleSizeMin is 0 or greater than the max, it is set to the max.
 
-All parameters can be overridden in the UI. These are the same parameters as the original
-command line: `w/W h/H a/A f/F m/M d/D t/T o/O p/P e/E b/B n s z`.
+All parameters can be set in the UI. These are the same parameters as the original command line:
+`w/W h/H a/A f/F m/M d/D t/T o/O p/P e/E b/B n s z`.
 
 ### 3.3 The map
 - The map is a torus: `MapWidth × MapHeight` squares, wrapping in both directions.
@@ -108,7 +113,7 @@ command line: `w/W h/H a/A f/F m/M d/D t/T o/O p/P e/E b/B n s z`.
   - `NumFood` (8-bit unsigned)
   - an **ordered list** of the ants on it
 - All ants on one square belong to the same team.
-- The list order matters, because it determines the order of `mem[1..]` given to an ant (§4.1).
+- The list order matters, because it determines the order of `mem[1..]` given to an ant (§3.10).
   - New and moving ants are appended at the end.
   - A base builder is re-inserted at the front (§3.6).
 
@@ -154,7 +159,7 @@ The sequence below is listed in exact random-number order.
 2. **Every living ant acts once, in random order:**
    - Let `n` be the number of ants that have not yet acted this turn.
    - Pick one with `Random(n)` from the unmoved part of the global ant list.
-   - Move it to the acted part, call it (§3.10), then perform its action (§3.6–3.8).
+   - Move it to the acted part, call it (§3.10), then perform its action (§3.6).
    - The exact list bookkeeping must be reproduced, because it determines which ant
      `Random(n)` selects:
      - The picked ant swaps places with the last unmoved ant.
@@ -232,10 +237,16 @@ it places one pile and checks again:
 
 ### 3.9 New ants
 - A new ant gets age 0 and its brain is zeroed.
-- Its first 4 bytes are then set to a random 32-bit value made from two draws of
-  `Random(65536)`, as `(r1 << 16) + r2`.
-- **[Q4]** The original's C code does not specify which of the two draws happens first, so it is
-  compiler-dependent. We will fix the order to match the reference build (§7).
+- Its first 4 bytes are then set to a random 32-bit value made from two random draws:
+  `(first draw << 16) + second draw`, each draw being `Random(65536)`.
+- **Draw order (decided).**
+  - The original C code, `(Random(1<<16)<<16)+Random(1<<16)`, does not say which of the two
+    draws happens first. The C language leaves that to the compiler.
+  - Tested: both modern GCC and Clang make the **left** draw first, so the first draw becomes
+    the high half. We use that order.
+  - Only the two halves of the random value would swap with the other order. Everything else in
+    the battle is the same either way.
+  - The 2003 Windows build (MSVC) may have used the other order. That can't be checked any more.
 - Brains smaller than 4 bytes only see the first bytes of that value.
 
 ### 3.10 Calling an ant
@@ -293,7 +304,7 @@ Example: if every other team is wiped out, the runner-up value is 0 and the lead
 immediately.
 
 ### 3.13 Random-number generator
-All randomness comes from one 32-bit generator per battle:
+All game randomness comes from one 32-bit generator per battle:
 
 ```
 Random(num):
@@ -307,13 +318,144 @@ Notes:
 - All arithmetic is unsigned 32-bit, as on the 32-bit machines of 2003.
 - The 2011 GitHub fork switched to 64-bit arithmetic, which changes every battle. **We follow the
   2003 32-bit behaviour.**
-- The game seed defaults to the current time, or is set by the user.
+- The game seed defaults to the current time, or is set by the user. It is always displayed so a
+  run can be repeated.
 
 ---
 
 ## 4. Ant interface
 
-### 4.1 C ants (historic and new)
+### 4.1 What an ant is, in plain words
+This works the same in C and JavaScript.
+
+- **An ant race is one function** plus a description of its **brain**.
+- **The brain** is a few small numbers each ant carries around. Its memory.
+- **Every turn the game asks each ant: "where do you go?"**, and calls your function with two
+  things:
+  1. **What the ant sees:** its own square and the 4 squares around it. For each square, how
+     many ants are there, whether there is a base, which team, and how much food.
+  2. **The brains of the ants on its own square.** Its own brain comes first. It can read and
+     change all of them, and that is how ants talk to each other.
+- **The function answers with one number:**
+  - 0 = stay
+  - 1 = right
+  - 2 = down
+  - 3 = left
+  - 4 = up
+  - add 8 to the move to carry one food along
+  - exactly 16 = build a base here
+
+### 4.2 JavaScript ants
+A JavaScript ant is the same idea written in JavaScript. Here is **Rambo** in both languages:
+
+**C (original):**
+```c
+#include "Myre.h"
+struct rb {
+};
+int RB(struct SquareData *f, struct rb *m) {
+	int i = 0;
+	int max = 0;
+	int best = 0;
+	for(i = 1; i < 5; i++){
+		if(f[i].Base == 1)
+			return i;
+	}
+	for(i = 1; i < 5; i++){
+		if(f[i].Team > 0){
+			if (f[i].NumAnts > max){
+				max = f[i].NumAnts;
+				best = i;
+			}
+		}
+	}
+	return best;
+}
+DefineAnt(Rambo, "Rambo#FF0000", RB, struct rb);
+```
+
+**JavaScript (new):**
+```js
+export default {
+  title: "Rambo#FF0000",
+  brain: [],                          // Rambo remembers nothing (0 bytes)
+
+  step(f, m) {
+    let max = 0;
+    let best = 0;
+    for (let i = 1; i < 5; i++) {
+      if (f[i].base == 1)
+        return i;
+    }
+    for (let i = 1; i < 5; i++) {
+      if (f[i].team > 0) {
+        if (f[i].ants > max) {
+          max = f[i].ants;
+          best = i;
+        }
+      }
+    }
+    return best;
+  },
+};
+```
+
+The differences:
+
+| C | JavaScript |
+|---|---|
+| `DefineAnt(Rambo, "Rambo#FF0000", RB, ...)` | `title: "Rambo#FF0000"` |
+| `struct rb { ... }` (the brain) | `brain: [ ... ]` (see below) |
+| `int RB(struct SquareData *f, struct rb *m)` | `step(f, m)` |
+| `int i = 0;` | `let i = 0;` (no types in JavaScript) |
+| `f[i].NumAnts`, `f[i].Base`, `f[i].Team`, `f[i].NumFood` | `f[i].ants`, `f[i].base`, `f[i].team`, `f[i].food` |
+| `f->NumAnts` (= `f[0].NumAnts`) | `f[0].ants` |
+| `m->x` (= `m[0].x`) | `m[0].x` |
+| `m[a].x` (another ant's brain) | `m[a].x` |
+
+Loops, `if`, `return`, arithmetic and comparisons are written the same way in both languages.
+
+**The brain.** In C, the brain is a `struct`. In JavaScript you list the same fields with a name
+and a size. Here is **Legions'** brain:
+
+```c
+struct LegionsBrain {
+	signed char x,y,z,w;
+	unsigned char v;
+};
+```
+```js
+brain: [
+  ["x", "i8"], ["y", "i8"], ["z", "i8"], ["w", "i8"],   // signed char  = i8
+  ["v", "u8"],                                         // unsigned char = u8
+],
+```
+
+| C type | JS size name | Range |
+|---|---|---|
+| `signed char` / `char` | `i8` | −128 … 127 |
+| `unsigned char` / `u_char` | `u8` | 0 … 255 |
+| `short` | `i16` | −32768 … 32767 |
+| `unsigned short` / `u_short` | `u16` | 0 … 65535 |
+| `int` / `long` | `i32` | about ±2.1 billion |
+| `unsigned int` / `u_long` | `u32` | 0 … about 4.3 billion |
+| `u_char path[16]` (array) | `["path", "u8", 16]` | use as `m[0].path[3]` |
+
+Brain fields behave like the C types:
+- Storing 300 in a `u8` gives 44, exactly as in C.
+- The brain size is counted the same way as in C, so Prestige is comparable between C and JS
+  ants.
+- A newborn ant's brain starts at 0, except **the first 4 bytes, which start random** (§3.9),
+  just as in C. SkyNET's 1-byte brain and Legions' 5-byte brain behave exactly as before.
+
+**Reproducibility rules for JS ants.**
+- `Math.random()` inside an ant is replaced by a generator seeded from the battle seed, so it is
+  reproducible.
+- Clocks (`Date`, `performance`) are not available to ants.
+- Variables outside `step` persist for the whole battle, like C globals. They are reset at the
+  start of every battle.
+
+### 4.3 C ants (historic and new)
 - **Source compatibility.** Source files compile unchanged against a `Myre.h` that provides the
   same `struct SquareData`, constants and `DefineAnt(name, title, func, braintype)` macro as the
   original.
@@ -326,46 +468,24 @@ Notes:
     report each ant's brain size so these cases can be checked.
 - **Per call**, the engine copies the brains into the module's memory, calls the function, and
   copies them back. This is exactly what the original did.
-- **C library.** The ants use a small set of library calls: `printf`/`fprintf` (debug output),
-  `memset`, `sqrt`, `rand`/`srand` (GOA and borg), and `exit`. The PoC provides:
+- **C library.** The ants use a small set of library calls, provided by a minimal built-in C
+  library:
   - `printf`/`fprintf` → shown in a debug console, off by default;
   - `memset`, `sqrt` → compiled in;
-  - `rand`/`srand` → **[Q5]** a copy of glibc's generator, so those ants behave as on Linux;
-  - `exit` → stops the battle with error code **E**.
-- **Global variables.** These persist across calls, as in the original. Each team gets its own
-  module instance. Some historic ants use them: `myresyre` (shared food coordinates), `borg`, and
-  `GridAnt`'s random state. This is allowed in the PoC. Those ants are labelled "uses global
-  state" in the UI. **[Q6]**
+  - `exit` → stops the battle with error code **E**;
+  - `rand`/`srand` (used by GOA and borg) → **decided:** a copy of the Linux (glibc) generator,
+    so the numbers look the same as on Linux. Each team gets its own generator, **reset at the
+    start of every battle** as if the program had just started.
+
+    The original shared one generator across all ants and all battles. That made a battle
+    depend on the battles before it, so the original wasn't fully reproducible for these two
+    ants. Resetting per battle keeps every battle reproducible from its seed.
+- **Global variables** keep their values between calls, as in the original. **Decided:** they are
+  allowed in the PoC.
+  - Each team gets its own module instance, which is reset at the start of every battle.
+  - Ants that use them (`myresyre`, `borg`, `GridAnt`) are labelled "uses global state" in the UI.
 - **Brain size** is the size of the brain type, as in the original. It is shown in the table and
   used for Prestige.
-
-### 4.2 JavaScript ants
-A JS ant is one file, also editable in the browser:
-
-```js
-export default {
-  title: "MyAnt#39A0F0",            // name, optional #RRGGBB colour (as the original)
-  brain: [                            // laid out like a C struct (C alignment rules)
-    ["rnd",   "u32"],                 // first 4 bytes are random at birth (§3.9)
-    ["x",     "i8"], ["y", "i8"],
-    ["state", "u8"],
-  ],
-  step(squares, mem) {
-    // squares[0..4]: {ants, base, team, food}  here, right, down, left, up
-    // mem[0]: this ant's brain; mem[1..]: other ants on the square
-    // return 0..4, plus 8 to carry food; or exactly 16 to build a base
-    return 0;
-  },
-};
-```
-
-- The brain is stored as raw bytes with the declared C-style layout. Brain size is therefore
-  well-defined and comparable with C ants.
-- Field types: `i8`, `u8`, `i16`, `u16`, `i32`, `u32`, plus fixed-size arrays such as
-  `["path", "u8", 16]`.
-- **[Q3]** Should a raw-bytes variant also be offered for people who prefer it?
-- JS ants could keep hidden state in variables outside `step`. In the PoC that is a matter of
-  honour, same as globals in C.
 
 ---
 
@@ -374,22 +494,71 @@ export default {
 ### 5.1 Setup screen
 - Pick participating ants from the built-in list and from JS ants loaded or edited in the
   browser.
+  - The order of the list matters, because it decides team letters A, B, C… and which team starts
+    in the centre. The order is shown and can be changed.
 - Set parameters (all of §3.2) and the seed, with an option for a random seed.
-- Choose a mode: **Watch one battle**, or **Run tournament** (N battles, no drawing).
+- Choose a mode: **Watch battles**, or **Run tournament** (no drawing, full speed).
 
 ### 5.2 Battle viewer
-- The canvas draws the full map with zoom and pan.
-- Colours:
-  - ants and bases in their team colour (from the title, or derived from the name the same way
-    as the original);
-  - food in a neutral colour;
-  - bases clearly marked.
-- Controls: pause, single-step, and a speed slider from 1 turn per frame up to as fast as
-  possible.
-- Live side panel per team: ants, bases, kills, deaths.
-- Hovering a square shows its contents.
-- At the end, the result is shown as the original's battle line, e.g.
-  `1 4087226510  128  128  22  31  18  12 ABC  6114 W A Legions`.
+Modelled on the original X11/Windows viewer (`MK_XWin.c` 0.12.3, `MK_MSWin.c`), with a few
+modern additions.
+
+**Map: one pixel per square, colours as in the original:**
+
+| Square | Colour |
+|---|---|
+| has a base | white |
+| ants carrying food (ants and food on the square) | light team colour |
+| ants without food | team colour |
+| empty but owned (territory), no food | dark team colour (= colour ÷ 4) |
+| food only | grey, brighter with more food (7 shades), white from 29 food up |
+| nothing | black |
+
+- Team colours come from the `#RRGGBB` in the title, or are derived from the name with the
+  original formula.
+- The light version is `colour ÷ 2 + 128`.
+
+**Team stats under the map:** one row per team, showing
+- the name;
+- the number of bases;
+- territory (squares owned);
+- the number of ants;
+- a bar made of territory (dark colour), bases × 75 (white) and ants (team colour);
+- a scale with a line every 100;
+- the red **win line**, which marks where the leader would win.
+
+**Timeline graph** (separate panel): each team's `ants + 75 × bases` over turns, plus the win
+line, rescaling every 1000 turns or 1000 points.
+
+**Title line:** battle number / total, and turn.
+
+**Keys (as the original):**
+
+| Key | Action |
+|---|---|
+| F1 | skip battle |
+| F2 | interrupt battle (counted as result I) |
+| F3 / Esc | stop tournament |
+| F4 | restart battle |
+| F5 | make this the last battle (press again to undo) |
+
+Chromebooks have no F-keys, so each of these also gets a button.
+
+**Display options (as the original's command-line switches):**
+- hide territory (`-t`);
+- hide ants without food (`-a`);
+- hide graph (`-g`);
+- team-stats update interval (`-s`);
+- map update interval (`-u`).
+
+**Modern additions:**
+- zoom (whole pixels: 1×, 2×, 3×…);
+- pause and single-step;
+- a speed slider;
+- hovering over a square shows its exact contents.
+
+**Result line** at the end of each battle, in the original format:
+`Batt Randomseed Widt Heig Ant Spc Min Dif Teams Turns T Winner`.
 
 ### 5.3 Tournament runner
 - Runs N battles in the worker and prints the original header block, one line per battle, and
@@ -409,11 +578,12 @@ export default {
   | Perf | Vict × median time ÷ own time |
   | Pres | Vict × median brain size ÷ own brain size (size 0 counts as 10 × median) |
 
-- **Time** is measured by timing batches of calls with `performance.now()`, because browser
-  timers are too coarse for single calls.
-  - It will not equal the original's numbers.
-  - It is only comparable between ants on the same machine, and JS vs WebAssembly ants are not
-    directly comparable. **[Q7]**
+- **Time / Perf (decided):** kept, and marked as approximate.
+  - Time is measured by timing batches of calls with `performance.now()`, because browser timers
+    are too coarse for single calls.
+  - The numbers will not equal the original's. They are only comparable between ants on the same
+    machine, and JS vs WebAssembly ants are not directly comparable.
+  - Time and Perf are the only values that can differ between two runs with the same seed.
 - Results can be copied as plain text.
 
 ### 5.4 Performance target
@@ -430,25 +600,26 @@ myrekrig/
   SPEC.md                 this document
   engine/                 game engine (JS, no dependencies)
   ui/                     viewer, setup, tournament UI
-  ants/js/                JS ants (examples written by us / you)
-  ants/c/                 your own C ants (if you add them)
+  ants/c/                 Legions, SkyNET, Rambo (yours; see §10)
+  ants/js/                JS ants (Rambo port as the first example, more later)
   tools/                  build script (C → wasm, bundle single HTML),
                           reference-engine comparison harness
   tests/                  rule tests and comparison tests (Node)
-  dist/myrekrig.html      built single-file app (not committed if it contains historic ants)
 ```
 
-The historic ants are **not** copied into this repository (see §10). The build script fetches
-them from the public 2011 repository at build time.
+- The other historic ants are **not** copied into this repository (see §10). The build script
+  fetches them from the public 2011 repository at build time.
+- The built HTML file is not committed. Claude sends it to you directly.
 
 ---
 
 ## 7. Verification against the original
 
-1. **Reference engine.** Build the original v2.4.7 engine from the 2011 repository in **32-bit
-   mode**. Add only a trace module, written using the original's own display-module hooks
-   (`SysDrawMap`, `SysSquareChanged`), so the engine's logic is untouched. The trace prints a
-   checksum of the full map state every turn, plus the battle result lines.
+1. **Reference engine.** Build the original v2.4.7 engine (gameplay-identical to your 2.4.6) with
+   32-bit arithmetic. Add only a trace module, written using the original's own display-module
+   hooks (`SysDrawMap`, `SysSquareChanged`, like `MK_Quiet.c`), so the engine's logic is
+   untouched. The trace prints a checksum of the full map state every turn, plus the battle
+   result lines.
 2. **New engine.** Run with the same seed, parameters and ants, and produce the same trace.
 3. **Comparison.**
    - The turn-by-turn checksums must match exactly.
@@ -459,40 +630,53 @@ them from the public 2011 repository at build time.
    - groups of 4–8;
    - all at once;
    - several seeds and parameter settings, including edge settings (tiny maps, huge
-     StartAnts, NewFoodSpace 1).
+     StartAnts, NewFoodSpace 1);
+   - **your ants (Legions, SkyNET, Rambo) in every category.**
 5. **Your verification.** You watch battles with ants you know, and run your own ants, to confirm
-   the game *feels* right. This catches anything the reference build itself might differ on from
-   the 2003 binaries.
+   the game *feels* right.
 6. **Known limits.**
-   - The reference is a modern compiler build, not the 2003 binary, so compiler-dependent details
-     (§3.9) follow the modern build.
+   - The reference is a modern compiler build, not the 2003 binary. The only known
+     compiler-dependent detail is §3.9.
    - Some historic ants did not compile in the 2011 fork. The build will list them, and we can
      decide whether to patch them.
 
 ---
 
-## 8. Milestones
+## 8. Reproducibility
 
-1. **Engine + reference comparison** (Node, no UI): rules, RNG, C ant loading, trace comparison
-   passing for the test matrix.
-2. **Tournament runner in the browser**: setup screen and results table, as a single HTML file.
-3. **Battle viewer.**
-4. **JS ants + in-browser editor.**
-5. **Your review round**, then fixes.
+The same:
+- engine version,
+- ant list (in the same order),
+- parameters, and
+- game seed
 
-Each milestone is committed separately for review.
+always give:
+- the same battles, turn by turn;
+- the same battle result lines;
+- the same results table, except **Time** and **Perf**, which are measurements.
+
+How this is guaranteed:
+- All game randomness comes from the seeded generator (§3.13).
+- C ants' `rand()` is reset per battle (§4.3).
+- JS ants' `Math.random()` is seeded, and clocks are hidden from ants (§4.2).
+- Global state in C and JS ants is reset at the start of each battle.
+- No part of the game depends on timing, the browser, or the machine.
+
+The game seed is always shown, and the full setup (ants, order, parameters, seed) can be copied
+as text and pasted back in to repeat a run exactly.
 
 ---
 
-## 9. Hosting options for the PoC
+## 9. Hosting
 
-| Option | Works on Chromebook | Notes |
-|---|---|---|
-| **Download the single HTML file and open it** | Yes | Simplest. Works offline. |
-| **Private claude.ai artifact link** | Yes | Nothing to set up; private by default. |
-| **GitHub Pages** from this repo | Yes | Needs a public repo, or a paid plan for a private one; would publish historic ants (§10). |
+**Decided for the PoC:** a single HTML file you download and open in Chrome on the Chromebook.
+It needs no internet and no installation.
 
-Recommendation: a single HTML file, optionally also as a private artifact. **[Q8]**
+**Later option:** publish to a subdirectory of AK47.dk, with GitHub in between. A GitHub Action
+would build the page on every change and upload it to the web host, for example via SFTP.
+- A public page can only include ants we may publish: yours, new ones, and any historic ants
+  whose authors agree (§10).
+- Your private copy can still include all historic ants.
 
 ---
 
@@ -501,27 +685,30 @@ Recommendation: a single HTML file, optionally also as a private artifact. **[Q8
 - The original engine and the historic ants carry copyright notices but **no licence**.
 - The new engine is written fresh from the rules in this document, not translated from the
   original source. Game rules and algorithms as such are not protected by copyright.
-- The historic ants are used **for local testing only**. They are not committed to this repo and
-  not published, unless their authors agree.
-- Recommended: contact Aske Simon Christensen. His permission, or an open licence on the original,
-  would remove all doubt.
+- **Your ants (Legions, SkyNET, Rambo)** are your own work. They can be committed to this repo and
+  published.
+- **Other historic ants** are used for testing only. They are not committed and not published,
+  unless their authors agree. The HTML file Claude sends you may include them for your private
+  testing.
+- Recommended before any public version: contact Aske Simon Christensen. His permission, or an
+  open licence on the original, would remove all doubt.
 
 ---
 
-## 11. Open questions
+## 11. Decisions
 
-- **Q1. Version.** Is v2.4.7 (2003) the version you know? Did the website version you played
-  later use different rules or defaults, for example a different ant API, other languages, or
-  other limits? Any differences you remember are valuable.
-- **Q2. Your ants.** Which ant races did you write, and do you still have the source? Are any of
-  them among the 52 in the 2011 repository? Your own ants are the best test cases.
-- **Q3. JS brain format.** Typed fields as in §4.2 (recommended), raw bytes, or both?
-- **Q4. Order of the two random draws for a new ant's first 4 bytes.** Fine to settle it from the
-  reference build?
-- **Q5. `rand()` in C ants.** Reproduce glibc's generator (recommended), or a simpler stand-in?
-- **Q6. Global state in C ants.** Allow, as in the original (recommended for the PoC)?
-- **Q7. Time and Perf columns.** Keep them, knowing they are only roughly comparable in a
-  browser?
-- **Q8. Hosting.** Downloaded single HTML file, private artifact, or GitHub Pages?
-- **Q9. Viewer.** Anything from the original X11 viewer you'd like recreated, such as its look,
-  keyboard controls, or showing only one team (the "watch team")?
+| # | Question | Decision |
+|---|---|---|
+| Q1 | Which version | Rules of 2.4.6/2.4.7 (identical gameplay). You don't remember any rule changes. |
+| Q2 | Your ants | Legions, SkyNET, Rambo. Included in the repo and used as key test cases. |
+| Q3 | JS brain format | Typed field list, explained in plain words in §4.1–4.2. |
+| Q4 | Random draw order for new ants | Left draw first, as in modern GCC and Clang (§3.9). |
+| Q5 | `rand()` in C ants | Linux-compatible, per team, reset every battle. Fully reproducible (§4.3, §8). |
+| Q6 | Global state in C ants | Allowed in the PoC, labelled in the UI. |
+| Q7 | Time / Perf columns | Kept, marked approximate. |
+| Q8 | Hosting | Downloadable single HTML file. AK47.dk via GitHub later. |
+| Q9 | Viewer | Recreate the original viewer, with stats bars, graph, keys and switches (§5.2). |
+
+**Still open** (not blocking the start):
+- Whether to patch historic ants that don't compile. Decided when we see the list.
+- AK47.dk hosting details (access method, subdirectory name). Not needed for the PoC.
