@@ -25,6 +25,10 @@ mkdirSync(WORK, { recursive: true });
 const flags = process.argv.slice(2);
 const quick = flags.includes("--quick");
 const only = (flags.find((f) => f.startsWith("--only=")) || "").slice(7);
+// --shard=i/n runs every n-th configuration (to use several processes).
+// --match=text only runs configurations whose label contains the text.
+const match = (flags.find((f) => f.startsWith("--match=")) || "").slice(8);
+const [shard, shards] = ((flags.find((f) => f.startsWith("--shard=")) || "--shard=0/1").slice(8)).split("/").map(Number);
 
 // --- Ants -------------------------------------------------------------------
 
@@ -122,6 +126,8 @@ let passed = 0, failed = 0, turns = 0;
 const failures = [];
 const t0 = Date.now();
 for (const [i, c] of configs.entries()) {
+  if (i % shards !== shard) continue;
+  if (match && !`[${c.group}] ${c.ants.join(",")} ${c.args.join(" ")}`.includes(match)) continue;
   const label = `[${c.group}] ${c.ants.length > 8 ? `${c.ants.length} ants` : c.ants.join(",")} ${c.args.join(" ")}`;
   try {
     const ref = runRef(c.ants, c.args, i, c.every);

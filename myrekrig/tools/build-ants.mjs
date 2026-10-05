@@ -22,7 +22,7 @@ const OBJ = join(CACHE, "wasm-obj");
 const WASM_DIR = join(ROOT, "tools", "wasm");
 
 const CFLAGS = [
-  "--target=wasm32", "-O2", "-std=gnu89", "-fgnu89-inline", "-fsigned-char", "-DNDEBUG", "-Dmain=mk_ant_main",
+  "--target=wasm32", "-O2", "-fno-strict-aliasing", "-std=gnu89", "-fgnu89-inline", "-fsigned-char", "-DNDEBUG", "-Dmain=mk_ant_main",
   "-nostdlib", "-w", "-I", join(WASM_DIR, "include"),
 ];
 const LDFLAGS = ["-Wl,--no-entry", "-Wl,-z,stack-size=1048576", "-Wl,--strip-debug"];

@@ -11,16 +11,26 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Game, defaultArgs, parseArgs } from "../engine/engine.js";
 import { loadWasmAnt } from "../engine/wasm-ant.js";
+import { compileJsAnt } from "../engine/js-ant.js";
+import { existsSync } from "node:fs";
 import { traceLine, dumpState } from "../engine/trace.js";
 import { buildAnts } from "./build-ants.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
+// C ants by name (compiled to WebAssembly on demand); JavaScript ants by
+// file name ending in .js (looked up in ants/js, or a path).
 export function loadAnts(names, options = {}) {
-  const report = buildAnts(names);
+  const report = buildAnts(names.filter((n) => !n.endsWith(".js")));
   const failed = report.filter((r) => !r.ok);
   if (failed.length) throw new Error(`Could not build: ${failed.map((r) => `${r.name} (${r.error})`).join(", ")}`);
-  return names.map((n) => loadWasmAnt(readFileSync(join(ROOT, ".cache", "wasm", `${n}.wasm`)), options));
+  return names.map((n) => {
+    if (n.endsWith(".js")) {
+      const file = existsSync(join(ROOT, "ants", "js", n)) ? join(ROOT, "ants", "js", n) : n;
+      return compileJsAnt(readFileSync(file, "utf8"));
+    }
+    return loadWasmAnt(readFileSync(join(ROOT, ".cache", "wasm", `${n}.wasm`)), options);
+  });
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

@@ -476,6 +476,8 @@ Brain fields behave like the C types:
   - The old GCC "cast as lvalue" form `(unsigned int)i >>= 1` is written out as
     `i = (unsigned int)i >> 1`. Affected: NewDesert.
   - A helper function named `main` is renamed. Affected: Cascade.
+  - Both builds use `-fno-strict-aliasing`. The original `Myre.h` copies brains through a
+    pointer of a different type, which modern optimizers may miscompile otherwise.
   - **Functions that end without `return`** now return 0.
     - In C the result of such a function is whatever value happens to be in a register, so it
       differs between compilers. The 2003 binaries, today's GCC and WebAssembly all gave

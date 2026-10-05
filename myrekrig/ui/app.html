@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MyreKrig</title>
+<style>
+:root {
+  --bg: #111316;
+  --panel: #1b1e23;
+  --panel2: #23272e;
+  --line: #2f343c;
+  --text: #d9dde3;
+  --dim: #8a929c;
+  --accent: #e0b040;
+  --good: #6cc070;
+  --bad: #e06060;
+  --mono: ui-monospace, "Cascadia Mono", "Roboto Mono", Menlo, Consolas, monospace;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--bg); color: var(--text); font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+header { display: flex; align-items: baseline; gap: 16px; padding: 10px 16px; border-bottom: 1px solid var(--line); }
+header h1 { margin: 0; font-size: 20px; letter-spacing: .5px; }
+header h1 span { color: var(--accent); }
+#status { font-family: var(--mono); color: var(--dim); }
+.layout { display: grid; grid-template-columns: 340px 1fr; min-height: calc(100% - 49px); }
+aside { background: var(--panel); border-right: 1px solid var(--line); padding: 12px; overflow-y: auto; }
+main { padding: 12px; overflow: auto; min-width: 0; }
+h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--dim); margin: 14px 0 6px; }
+h2:first-child { margin-top: 0; }
+button, select, input { font: inherit; color: var(--text); background: var(--panel2); border: 1px solid var(--line); border-radius: 4px; }
+button { padding: 4px 10px; cursor: pointer; }
+button:hover:not(:disabled) { border-color: var(--dim); }
+button:disabled { opacity: .45; cursor: default; }
+button.primary { background: var(--accent); color: #111; border-color: var(--accent); font-weight: 600; }
+input[type=number], input[type=text] { padding: 3px 6px; }
+select { padding: 3px 4px; }
+.row { display: flex; gap: 6px; align-items: center; margin: 4px 0; flex-wrap: wrap; }
+.row label { color: var(--dim); }
+#teamList { list-style: none; margin: 0; padding: 0; }
+#teamList li { display: flex; align-items: center; gap: 6px; padding: 3px 4px; border-radius: 4px; }
+#teamList li:nth-child(odd) { background: var(--panel2); }
+#teamList .letter { font-family: var(--mono); color: var(--dim); width: 14px; }
+#teamList .swatch { width: 12px; height: 12px; border-radius: 2px; flex: none; }
+#teamList .name { flex: 1; font-family: var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#teamList .tag { font-size: 11px; color: var(--dim); }
+#teamList button { padding: 0 6px; font-size: 12px; }
+.empty { color: var(--dim); font-style: italic; padding: 4px; }
+table.params { border-collapse: collapse; width: 100%; font-size: 13px; }
+table.params td { padding: 2px 3px; }
+table.params input { width: 72px; }
+table.params td:first-child { color: var(--dim); }
+details summary { cursor: pointer; color: var(--dim); margin: 8px 0 4px; }
+#setupLine { width: 100%; font-family: var(--mono); font-size: 12px; }
+.hint { color: var(--dim); font-size: 12px; }
+.toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 6px 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; margin-bottom: 10px; }
+.toolbar .sep { width: 1px; height: 22px; background: var(--line); }
+.toolbar label { color: var(--dim); display: flex; gap: 4px; align-items: center; }
+.keys button { font-family: var(--mono); font-size: 12px; }
+.viewer { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-start; }
+.mapbox { background: #000; border: 1px solid var(--line); max-width: 100%; max-height: 72vh; overflow: auto; }
+#map { display: block; image-rendering: pixelated; }
+.side { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+canvas.panel { background: #000; border: 1px solid var(--line); display: block; }
+#hover { font-family: var(--mono); font-size: 12px; color: var(--dim); min-height: 18px; }
+#title { font-family: var(--mono); color: var(--accent); }
+pre#out { background: #0b0c0e; border: 1px solid var(--line); border-radius: 6px; padding: 10px; font: 12px/1.35 var(--mono); white-space: pre; overflow: auto; max-height: 60vh; margin: 10px 0 0; }
+#warnings { color: var(--bad); font-family: var(--mono); font-size: 12px; white-space: pre-wrap; }
+.hidden { display: none !important; }
+#jsList { list-style: none; margin: 0; padding: 0; }
+#jsList li { display: flex; gap: 6px; align-items: center; padding: 2px 4px; }
+#jsList .name { flex: 1; font-family: var(--mono); }
+#jsList .err { color: var(--bad); font-size: 12px; }
+#jsList button { padding: 0 8px; font-size: 12px; }
+.editor { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 10px; margin-bottom: 10px; }
+#code { width: 100%; height: 420px; resize: vertical; background: #0b0c0e; color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 8px; font: 13px/1.45 var(--mono); tab-size: 2; }
+#editorMsg { font-family: var(--mono); font-size: 12px; min-height: 18px; margin: 6px 0; white-space: pre-wrap; }
+#editorMsg.ok { color: var(--good); }
+#editorMsg.bad { color: var(--bad); }
+@media (max-width: 860px) {
+  .layout { grid-template-columns: 1fr; }
+  aside { border-right: 0; border-bottom: 1px solid var(--line); }
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>Myre<span>Krig</span></h1>
+  <div id="status">Loading ants…</div>
+</header>
+<div class="layout">
+  <aside>
+    <h2>Teams (in order)</h2>
+    <ul id="teamList"></ul>
+    <div class="row">
+      <select id="addSelect" style="flex:1"></select>
+      <button id="addBtn">Add</button>
+    </div>
+    <div class="row">
+      <button id="addYours">Add yours</button>
+      <button id="addAll">Add all</button>
+      <button id="clearTeams">Clear</button>
+    </div>
+    <div class="hint">The first team is team A and always starts in the centre.</div>
+
+    <h2>JavaScript ants</h2>
+    <ul id="jsList"></ul>
+    <div class="row"><button id="newJs">New ant</button></div>
+
+    <h2>Game</h2>
+    <div class="row"><label for="pn">Battles</label><input id="pn" type="number" min="1" placeholder="100" style="width:80px">
+      <label for="ps">Seed</label><input id="ps" type="number" min="0" placeholder="random" style="width:110px">
+      <button id="newSeed" title="New random seed">New</button></div>
+    <div class="row"><label for="pz">Watch team</label><select id="pz"><option value="">(none)</option></select></div>
+    <details>
+      <summary>Battle parameters</summary>
+      <table class="params" id="paramTable"></table>
+      <div class="hint">Empty = original default. Each battle draws every value between min and max.</div>
+    </details>
+
+    <h2>Setup line</h2>
+    <input id="setupLine" type="text" spellcheck="false">
+    <div class="row">
+      <button id="applyLine">Apply</button>
+      <button id="copyLine">Copy</button>
+    </div>
+    <div class="hint">Same syntax as the original command line. The same line always gives the same game.</div>
+
+    <h2>Run</h2>
+    <div class="row">
+      <button id="startBtn" class="primary">Start</button>
+      <button id="stopBtn" disabled>Stop</button>
+    </div>
+  </aside>
+  <main>
+    <section id="editor" class="editor hidden">
+      <div class="row">
+        <strong id="editorTitle">JavaScript ant</strong>
+        <span class="hint" id="editorHint"></span>
+      </div>
+      <textarea id="code" spellcheck="false"></textarea>
+      <div id="editorMsg"></div>
+      <div class="row">
+        <button id="saveJs" class="primary">Save &amp; check</button>
+        <button id="downloadJs">Download .js</button>
+        <button id="deleteJs">Delete</button>
+        <button id="closeJs">Close</button>
+        <span class="hint">Saved in this browser only. Use Download to keep a copy.</span>
+      </div>
+    </section>
+    <div class="toolbar">
+      <label><input type="checkbox" id="show" checked> Show battles</label>
+      <label>Speed <input type="range" id="speed" min="0" max="9" value="5"> <span id="speedLabel"></span></label>
+      <button id="pauseBtn" disabled>Pause</button>
+      <button id="stepBtn" disabled>Step</button>
+      <div class="sep"></div>
+      <label>Zoom <button id="zoomOut">−</button><span id="zoomLabel">1×</span><button id="zoomIn">+</button></label>
+      <div class="sep"></div>
+      <label><input type="checkbox" id="optTerritory" checked> Territory</label>
+      <label><input type="checkbox" id="optAnts" checked> Ants without food</label>
+      <label><input type="checkbox" id="optGraph" checked> Graph</label>
+    </div>
+    <div class="toolbar keys">
+      <button data-cmd="1" title="F1">F1 Skip battle</button>
+      <button data-cmd="2" title="F2">F2 Interrupt</button>
+      <button data-cmd="3" title="F3 / Esc">F3 End tournament</button>
+      <button data-cmd="4" title="F4">F4 Restart battle</button>
+      <button data-cmd="5" title="F5">F5 Last battle</button>
+      <span id="title"></span>
+    </div>
+    <div class="viewer" id="viewer">
+      <div>
+        <div class="mapbox"><canvas id="map" width="64" height="64"></canvas></div>
+        <div id="hover"></div>
+      </div>
+      <div class="side">
+        <canvas class="panel" id="stats" width="640" height="40"></canvas>
+        <canvas class="panel" id="graph" width="640" height="280"></canvas>
+      </div>
+    </div>
+    <div id="warnings"></div>
+    <pre id="out"></pre>
+  </main>
+</div>
+<script type="application/json" id="ants-data">{{ANTS}}</script>
+<script type="text/plain" id="worker-src">{{WORKER}}</script>
+<script>
+{{APP}}
+</script>
+</body>
+</html>

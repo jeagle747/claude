@@ -35,7 +35,7 @@ if [ ! -f "$SRC/.ready" ]; then
 fi
 cp "$HERE/MK_Trace.c" "$SRC/MK_Trace.c"
 
-CFLAGS="-m32 -fno-pic -std=gnu89 -fgnu89-inline -fsigned-char -DNDEBUG -O2 -w -I$SRC"
+CFLAGS="-m32 -fno-pic -fno-strict-aliasing -std=gnu89 -fgnu89-inline -fsigned-char -DNDEBUG -O2 -w -I$SRC"
 mkdir -p "$OBJ"
 
 # Ant objects are cached; the ant list only changes MyreHold.c.

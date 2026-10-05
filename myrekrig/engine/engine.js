@@ -257,7 +257,16 @@ export class Game {
         if (!this.hooks.battleInit || this.hooks.battleInit(this)) {
           this.battleInit();
           do {
-            this.doTurn();
+            try {
+              this.doTurn();
+            } catch (e) {
+              // An ant crashed or called exit(): the battle ends with E (SPEC §4.3).
+              this.warn(`battle ${this.BattleCount + 1}, turn ${this.CurrentTurn}: ${e.message}`);
+              this.termCheck(); // decides the winner from the current state
+              tc = TERM.ERROR;
+              sc = SYS.CONTINUE;
+              break;
+            }
             if (this.hooks.drawMap) this.hooks.drawMap(this);
             tc = this.termCheck();
             sc = this.hooks.check ? this.hooks.check(this) : SYS.CONTINUE;
