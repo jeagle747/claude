@@ -32,7 +32,9 @@ function ensureRepo() {
     mkdirSync(CACHE, { recursive: true });
     execFileSync("git", ["clone", "-q", "https://github.com/einar-io/Myrekrig-2011", REPO], { stdio: "inherit" });
   }
-  execFileSync("git", ["-C", REPO, "checkout", "-q", COMMIT]);
+  // Only check out when needed: parallel runs would otherwise race on git's lock.
+  const head = execFileSync("git", ["-C", REPO, "rev-parse", "HEAD"]).toString().trim();
+  if (head !== COMMIT) execFileSync("git", ["-C", REPO, "checkout", "-q", COMMIT]);
 }
 
 // Your own ants live in ants/c and take precedence over the historic copies.

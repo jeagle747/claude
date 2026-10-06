@@ -8,6 +8,7 @@ const PARAMS = [
   ["HalfTimePercent", "e", "60"], ["BattleSize", "b", "all"],
 ];
 const YOURS = ["Legions", "SkyNET", "Rambo"];
+const BY_CLAUDE = ["Kompas", "Probe", "Probe.js"];
 const USES_GLOBALS = ["myresyre", "borg", "GridAnt"];
 const SPEEDS = [1, 2, 5, 10, 25, 50, 100, 250, 1000, 0]; // turns per frame; 0 = as fast as possible
 
@@ -104,7 +105,7 @@ function renderTeams() {
   } else {
     ul.innerHTML = teams.map((id, i) => {
       const a = antInfo(id);
-      const tags = [YOURS.includes(id) ? "yours" : "", a.js ? "JS" : "", USES_GLOBALS.includes(id) ? "global state" : "", `${a.memSize} B`]
+      const tags = [YOURS.includes(id) ? "yours" : "", BY_CLAUDE.includes(id) ? "Claude" : "", a.js ? "JS" : "", USES_GLOBALS.includes(id) ? "global state" : "", `${a.memSize} B`]
         .filter(Boolean).join(" · ");
       return `<li><span class="letter">${String.fromCharCode(65 + i)}</span>
         <span class="swatch" style="background:${hex(a.color)}"></span>

@@ -18,7 +18,7 @@ self-contained file and works offline.
 | `engine/wasm-ant.js` | Loads a C ant compiled to WebAssembly |
 | `engine/js-ant.js` | JavaScript ants: brain layout, seeded `Math.random` |
 | `engine/trace.js` | Turn-by-turn state checksum and state dump, for comparison |
-| `ants/c/` | Legions, SkyNET and Rambo (by Jørn Holm); Probe (example) |
+| `ants/c/` | Legions, SkyNET and Rambo (by Jørn Holm); Kompas (by Claude, a competitive ant); Probe (example) |
 | `ants/js/` | Rambo and Probe ported to JavaScript (they play identically to the C versions) |
 | `ui/` | Browser app: page, viewer, worker |
 | `tools/build-html.mjs` | Bundles everything into `dist/myrekrig.html` |
