@@ -39,15 +39,37 @@ public [2011 repository](https://github.com/einar-io/Myrekrig-2011) into `.cache
 Requirements: Node 18+, `clang` with the wasm32 target and `wasm-ld`, and for the reference
 build `gcc` with 32-bit support (`gcc-multilib`).
 
+### Command line, like the original `mk`
+
 ```sh
-# A game with the JS engine; the arguments are the original's (n = battles, s = seed, ...)
-node tools/mk.mjs Legions SkyNET Rambo -- n10 s12345
+./mk b5 B10 n1000 s1          # 1000 battles, 5-10 teams each, seed 1, all ants
+./mk -j4 b5 B10 n1000 s1      # the same on 4 cores
+./mk z12 b5 B10 n1000 s1      # only the battles with team 12 (see --list)
+./mk --ants Legions,SkyNET,Kompas n100 s7
+./mk --list                   # all ants with team numbers
+./mk --help
+```
 
-# The same game with the original engine
-tools/reference/build-ref.sh .cache/mk Legions SkyNET Rambo
-MK_TRACE_EVERY=0 .cache/mk n10 s12345
+The parameters are the original's: lower case sets min and max, upper case only max (`b5 B10` =
+5 to 10 teams per battle). Without `--ants`, all C ants play, sorted by name; that order gives
+the team letters and the numbers for `z`. The output is the original's: header, one line per
+battle, and the final table (Bases, Ants, Size, Ages, Comb, Time, Vict, Perf, Pres).
 
-# Compare the two engines (quick subset, or the full matrix)
-node tests/compare.mjs --quick
-node tests/compare.mjs
+`-j N` runs N battles at a time. The output is identical to running them one at a time, except
+in rare cases for ants that read past their own brains (Inkal), because in the original those see
+leftovers from the previous battle.
+
+### Browser app
+
+`node tools/build-html.mjs`, then open `dist/myrekrig.html`. The setup line takes the same
+command (`mk --all b5 B10 n1000 s1`) and gives the same results as the terminal. Untick
+"Show battles" to run without display; "All cores" then runs battles in parallel.
+
+### Tests
+
+```sh
+node tests/compare.mjs --quick   # JS engine vs the original C engine, turn by turn
+node tests/compare.mjs           # the full matrix (about 230 setups)
+node tests/js-ants.mjs           # JS ports play identically to their C originals
+node tests/browser.mjs           # the built app in headless Chromium vs the command line
 ```

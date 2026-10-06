@@ -68,6 +68,21 @@ canvas.panel { background: #000; border: 1px solid var(--line); display: block; 
 pre#out { background: #0b0c0e; border: 1px solid var(--line); border-radius: 6px; padding: 10px; font: 12px/1.35 var(--mono); white-space: pre; overflow: auto; max-height: 60vh; margin: 10px 0 0; }
 #warnings { color: var(--bad); font-family: var(--mono); font-size: 12px; white-space: pre-wrap; }
 .hidden { display: none !important; }
+.live { margin-top: 10px; }
+.tables { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-start; }
+.tablebox, .results { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; overflow-x: auto; max-width: 100%; }
+.results { margin-top: 10px; }
+.tablebox h3, .results h3 { margin: 0 0 6px; font-size: 13px; color: var(--dim); text-transform: uppercase; letter-spacing: 1px; }
+table.stats { border-collapse: collapse; font: 12px/1.4 var(--mono); }
+table.stats caption { text-align: left; color: var(--dim); padding-bottom: 4px; font-family: system-ui, sans-serif; }
+table.stats th, table.stats td { padding: 2px 8px; text-align: right; white-space: nowrap; }
+table.stats th { color: var(--dim); font-weight: 600; border-bottom: 1px solid var(--line); }
+table.stats td:nth-child(2), table.stats th:nth-child(2) { text-align: left; }
+#battleTable td:first-child, #battleTable th:first-child { text-align: left; }
+#resultTable th[data-sort] { cursor: pointer; }
+#resultTable th.sorted { color: var(--accent); }
+table.stats tr.total td { border-top: 1px solid var(--line); color: var(--dim); }
+.sw { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; }
 #jsList { list-style: none; margin: 0; padding: 0; }
 #jsList li { display: flex; gap: 6px; align-items: center; padding: 2px 4px; }
 #jsList .name { flex: 1; font-family: var(--mono); }
@@ -99,7 +114,7 @@ pre#out { background: #0b0c0e; border: 1px solid var(--line); border-radius: 6px
     </div>
     <div class="row">
       <button id="addYours">Add yours</button>
-      <button id="addAll">Add all</button>
+      <button id="addAll" title="All C ants, in the command line's order">All ants</button>
       <button id="clearTeams">Clear</button>
     </div>
     <div class="hint">The first team is team A and always starts in the centre.</div>
@@ -125,7 +140,7 @@ pre#out { background: #0b0c0e; border: 1px solid var(--line); border-radius: 6px
       <button id="applyLine">Apply</button>
       <button id="copyLine">Copy</button>
     </div>
-    <div class="hint">Same syntax as the original command line. The same line always gives the same game.</div>
+    <div class="hint">The command-line syntax, e.g. <code>mk --all b5 B10 n1000 s1</code>. The same line gives the same game here and in the terminal.</div>
 
     <h2>Run</h2>
     <div class="row">
@@ -151,6 +166,7 @@ pre#out { background: #0b0c0e; border: 1px solid var(--line); border-radius: 6px
     </section>
     <div class="toolbar">
       <label><input type="checkbox" id="show" checked> Show battles</label>
+      <label title="Without display, run several battles at once on all processor cores"><input type="checkbox" id="parallel" checked> All cores when not showing</label>
       <label>Speed <input type="range" id="speed" min="0" max="9" value="5"> <span id="speedLabel"></span></label>
       <button id="pauseBtn" disabled>Pause</button>
       <button id="stepBtn" disabled>Step</button>
@@ -179,6 +195,22 @@ pre#out { background: #0b0c0e; border: 1px solid var(--line); border-radius: 6px
         <canvas class="panel" id="graph" width="640" height="280"></canvas>
       </div>
     </div>
+    <section class="live">
+      <div id="progress" class="hint"></div>
+      <div class="tables">
+        <div class="tablebox"><h3>Current battle</h3><table id="battleTable" class="stats"></table></div>
+        <div class="tablebox"><h3>Standings so far</h3><table id="standTable" class="stats"></table></div>
+      </div>
+    </section>
+    <section id="resultsBox" class="results hidden">
+      <h3>Final ratings</h3>
+      <table id="resultTable" class="stats"></table>
+      <p class="hint">The original's final table. Click a column to sort.
+        <b>Vict</b>: battles won. <b>Perf</b>: Vict × median CPU time ÷ own CPU time.
+        <b>Pres</b>: Vict × median brain size ÷ own brain size. <b>Comb</b>: kills ÷ (kills + deaths).
+        <b>Bases</b>: bases built per battle. <b>Ants</b>: ants born per battle. <b>Size</b>: average live ants.
+        <b>Ages</b>: average age at death. <b>Time</b>: ns per ant call (measured, varies between runs).</p>
+    </section>
     <div id="warnings"></div>
     <pre id="out"></pre>
   </main>

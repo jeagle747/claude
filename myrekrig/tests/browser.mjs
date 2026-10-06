@@ -60,14 +60,34 @@ const jsCli = execFileSync("node", [join(ROOT, "tools", "mk.mjs"), "Probe.js", "
 const sameJs = mask(jsBrowser) === mask(jsCli);
 console.log(sameJs ? "JS ants: browser identical to command line" : "JS ants: DIFFERENT from command line");
 
-// 3. The editor: a new ant from the template compiles.
+// 3. A parallel run (all cores, no display) with the command-line syntax
+//    equals the terminal command, and fills the live and final tables.
+await page.uncheck("#show");
+await page.check("#parallel");
+const mkLine = "mk --ants Legions,SkyNET,Rambo,Kompas,A5 n8 b2 B3 s5";
+await page.fill("#setupLine", mkLine);
+await page.click("#applyLine");
+await page.click("#startBtn");
+await page.waitForFunction(() => document.getElementById("status").textContent === "Finished" &&
+  document.getElementById("out").textContent.includes("Tot./Aver."), null, { timeout: 600000 });
+const parBrowser = await page.textContent("#out");
+const parCli = execFileSync(join(ROOT, "mk"), mkLine.split(" ").slice(1)).toString();
+const samePar = mask(parBrowser) === mask(parCli);
+console.log(samePar ? "parallel run: browser identical to ./mk" : "parallel run: DIFFERENT from ./mk");
+if (!samePar) console.log("--- browser\n" + parBrowser + "\n--- cli\n" + parCli);
+const resultRows = await page.locator("#resultTable tr").count();
+const standRows = await page.locator("#standTable tr").count();
+console.log(`results table rows: ${resultRows}, standings rows: ${standRows}, progress: ${await page.textContent("#progress")}`);
+const tablesOk = resultRows === 7 && standRows === 6;
+
+// 4. The editor: a new ant from the template compiles.
 await page.click("#newJs");
 await page.click("#saveJs");
 await page.waitForFunction(() => /^OK: MyAnt\.js/.test(document.getElementById("editorMsg").textContent), null, { timeout: 10000 });
 console.log(`editor: ${await page.textContent("#editorMsg")}`);
 await page.click("#closeJs");
 
-// 4. Watch a battle for a few seconds and take a screenshot.
+// 5. Watch a battle for a few seconds and take a screenshot.
 await page.check("#show");
 await page.fill("#setupLine", "Legions SkyNET Rambo -- n5 s99");
 await page.click("#applyLine");
@@ -81,4 +101,4 @@ console.log(`screenshot: .cache/screenshot.png  (${await page.textContent("#stat
 
 if (errors.length) console.log("page errors:\n" + errors.join("\n"));
 await browser.close();
-process.exit(same && sameJs && !errors.length ? 0 : 1);
+process.exit(same && sameJs && samePar && tablesOk && !errors.length ? 0 : 1);

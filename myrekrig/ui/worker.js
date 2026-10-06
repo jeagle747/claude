@@ -6,7 +6,11 @@
 // Messages from the page:
 //   {type:"init", ants:[{name, bytes}], js:[{id, source}]}  compile the ants
 //   {type:"addJs", id, source}               compile (or replace) a JS ant
-//   {type:"start", ants:[names], argv:[...]} start a game
+//   {type:"start", ants:[names], argv:[...], jobs?, job?}  start a game; with
+//        jobs > 1 this worker plays only battles i with i % jobs === job and
+//        reports each battle's text separately (parallel runs)
+//   {type:"finish", totals}                  print the final table for merged
+//                                            totals (parallel runs)
 //   {type:"run", show, budgetMs, maxTurns}   run a slice, then reply with a frame
 //   {type:"cmd", code}                       F1..F5 (SYS codes)
 //   {type:"options", territory, ants}        display options
@@ -26,6 +30,7 @@ let warnings = [];
 let W = 0, H = 0, pix = null, palette = null, slots = 0;
 let graph = [], graphWin = [], graphSent = 0;
 let battleSerial = 0;
+let parallel = false, battleTexts = [], startTeams = null, startArgv = null;
 
 onmessage = (e) => {
   const m = e.data;
@@ -33,6 +38,7 @@ onmessage = (e) => {
     if (m.type === "init") init(m);
     else if (m.type === "addJs") postMessage({ type: "jsAnt", info: addJs(m.id, m.source) });
     else if (m.type === "start") start(m);
+    else if (m.type === "finish") finish(m);
     else if (m.type === "run") run(m);
     else if (m.type === "cmd") pendingCmd = m.code;
     else if (m.type === "options") { opts = { ...opts, ...m.options }; if (game && pix) repaint(); }
@@ -79,8 +85,15 @@ function start(m) {
   });
   const args = parseArgs(defaultArgs(), m.argv);
   out = ""; warnings = []; battleSerial = 0; pendingCmd = 0;
+  parallel = (m.jobs || 1) > 1; battleTexts = []; startTeams = teams; startArgv = m.argv;
+  let cur = "";
   game = new Game(teams, args, {
-    out: (s) => { out += s; },
+    noHeader: parallel && m.job !== 0,
+    noResult: parallel,
+    only: parallel ? (i) => i % m.jobs === m.job : undefined,
+    afterBattle: parallel ? (g) => { battleTexts.push({ index: g.BattleCount, text: cur }); cur = ""; } : undefined,
+    battleSkipped: parallel ? (g) => { battleTexts.push({ index: g.BattleCount, text: "" }); } : undefined,
+    out: (s) => { if (parallel && game && game.Used && game.Used.BattleSize && !game.finished) cur += s; else out += s; },
     warn: (s) => { warnings.push(s); },
     battleInit: (g) => { newBattleView(g); return true; },
     squareChanged: (x, y) => { if (pix) pix[x + y * W] = colorOf(x + y * W); },
@@ -124,8 +137,16 @@ function sendFrame(show, ended = 0) {
     turn: g.CurrentTurn || 0,
     serial: battleSerial,
     ended,
+    numAnts: g.NumAnts || 0, numFood: g.NumFood || 0,
+    totals: g.totals.slice(1).map((t) => ({ battles: t.NumBattles, won: t.NumWon, basesBuilt: t.BasesBuilt,
+      born: t.NumBorn, kill: t.Kill, killed: t.Killed })),
   };
   out = ""; warnings = [];
+  if (parallel) { frame.battleTexts = battleTexts; battleTexts = []; }
+  if (done) {
+    frame.results = g.results || null;
+    if (parallel) frame.rawTotals = g.totals;
+  }
   if (g.Used && g.Used.BattleSize && g.stats) {
     const U = g.Used;
     frame.used = { ...U };
@@ -133,7 +154,9 @@ function sendFrame(show, ended = 0) {
     for (let n = 0; n < U.BattleSize; n++) {
       const t = g.BattleTeams[n], s = g.stats[t];
       frame.slots.push({ letter: String.fromCharCode(64 + t), name: g.team[t].name, color: g.team[t].color,
-        ants: s.NumAnts, bases: s.NumBases, squares: s.SquareOwn });
+        ants: s.NumAnts, bases: s.NumBases, squares: s.SquareOwn, born: s.NumBorn, built: s.BasesBuilt,
+        kill: s.Kill, killed: s.Killed, dieAge: s.DieAge, timesRun: s.TimesRun,
+        nsPerCall: s.TimesTimed ? Math.round(s.TimeUsed * 1e6 / s.TimesTimed) : 0 });
     }
     frame.graph = graph.map((a) => a.slice(graphSent));
     frame.graphWin = graphWin.slice(graphSent);
@@ -213,4 +236,14 @@ function probe(m) {
   const team = g.sqTeam[i];
   postMessage({ type: "probe", x: m.x, y: m.y, ants: g.sqAnts[i], food: g.sqFood[i], base: g.sqBase[i],
     team: team ? g.team[team].name : "", letter: team ? String.fromCharCode(64 + team) : "" });
+}
+
+// Parallel runs: prints the final table for the totals merged by the page.
+function finish(m) {
+  let text = "";
+  const g = new Game(startTeams, parseArgs(defaultArgs(), startArgv), { out: (s) => { text += s; } });
+  g.totals = m.totals;
+  g.BattleCount = g.args.NumBattles;
+  g.printGameResult();
+  postMessage({ type: "finished", out: text, results: g.results });
 }

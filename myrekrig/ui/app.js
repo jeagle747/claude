@@ -61,7 +61,8 @@ function createWorker() {
     if (m.type === "ants") onAnts(m.list);
     else if (m.type === "jsAnt") onJsAnt(m.info);
     else if (m.type === "started") onStarted(m);
-    else if (m.type === "frame") onFrame(m);
+    else if (m.type === "frame") { if (par) onParallelFrame(0, m); else onFrame(m); }
+    else if (m.type === "finished") onFinished(m);
     else if (m.type === "probe") onProbe(m);
     else if (m.type === "error") { $("warnings").textContent += m.message + "\n"; stopGame(); }
   };
@@ -133,7 +134,7 @@ $("teamList").onclick = (e) => {
 };
 $("addBtn").onclick = () => { const id = $("addSelect").value; if (id && !teams.includes(id) && teams.length < 250) { teams.push(id); renderTeams(); } };
 $("addYours").onclick = () => { for (const id of YOURS) if (!teams.includes(id)) teams.push(id); renderTeams(); };
-$("addAll").onclick = () => { for (const a of ants) if (!a.js && !teams.includes(a.id)) teams.push(a.id); renderTeams(); };
+$("addAll").onclick = () => { teams = allOrder(); renderTeams(); };
 $("clearTeams").onclick = () => { teams = []; renderTeams(); };
 
 $("paramTable").innerHTML = `<tr><td></td><td class="hint">min</td><td class="hint">max</td></tr>` +
@@ -155,16 +156,40 @@ function buildArgv() {
   return argv;
 }
 
+// All C ants in the command line's order (mk --all): sorted by name.
+const allOrder = () => ants.filter((a) => !a.js).map((a) => a.id)
+  .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+
+// The setup line uses the command-line syntax: mk [--all | --ants A,B,C] params
 function updateLine() {
-  $("setupLine").value = `${teams.join(" ")} -- ${buildArgv().join(" ")}`.trim();
+  const all = allOrder();
+  const isAll = teams.length === all.length && teams.every((t, i) => t === all[i]);
+  $("setupLine").value = `mk ${isAll ? "--all" : `--ants ${teams.join(",")}`} ${buildArgv().join(" ")}`.trim();
 }
 
 function applyLine(line) {
-  const [left, right = ""] = line.split("--");
-  const names = left.trim().split(/\s+/).filter(Boolean);
+  let names = null, params = [];
+  const tokens = line.trim().split(/\s+/).filter(Boolean);
+  if (tokens[0] === "mk" || tokens[0] === "./mk") tokens.shift();
+  const sep = tokens.indexOf("--");
+  if (sep >= 0) {                       // older form: Ant1 Ant2 -- params
+    names = tokens.slice(0, sep);
+    params = tokens.slice(sep + 1);
+  } else {
+    for (let i = 0; i < tokens.length; i++) {
+      const t = tokens[i];
+      if (t === "--all") names = null;
+      else if (t === "--ants") names = (tokens[++i] || "").split(",").filter(Boolean);
+      else if (t.startsWith("--ants=")) names = t.slice(7).split(",").filter(Boolean);
+      else if (/^-j\d*$/.test(t)) { if (t === "-j") i++; }
+      else params.push(t);
+    }
+  }
+  if (!names) names = allOrder();       // no ants given: all ants, as on the command line
   const unknown = names.filter((n) => !antInfo(n));
   if (unknown.length) { alert(`Unknown ants: ${unknown.join(", ")}`); return false; }
   teams = names;
+  const right = params.join(" ");
   for (const [name] of PARAMS) { $(`min-${name}`).value = ""; $(`max-${name}`).value = ""; }
   $("pn").value = ""; $("ps").value = ""; $("pz").value = "";
   const z = [];
@@ -192,16 +217,82 @@ $("newSeed").onclick = () => { $("ps").value = Math.floor(Math.random() * 429496
 
 // --- Running --------------------------------------------------------------------
 
+// Parallel runs (no display): extra workers, each playing every jobs-th
+// battle; the page prints the battles in order and merges the totals.
+let par = null;   // {jobs, workers, texts, next, totals, done, frames}
+const cores = () => Math.max(1, Math.min(8, (navigator.hardwareConcurrency || 2)));
+let startTime = 0, turnsSeen = 0;
+
 $("startBtn").onclick = () => {
   if (!teams.length) { alert("Add at least one team."); return; }
   if ($("ps").value.trim() === "") $("ps").value = Math.floor(Math.random() * 4294967296);
   updateLine();
   outText = ""; $("out").textContent = ""; $("warnings").textContent = "";
   graphData = []; graphWin = []; graphSerial = -1; lastFrame = null;
-  worker.postMessage({ type: "start", ants: teams, argv: buildArgv() });
+  $("resultsBox").classList.add("hidden");
+  startTime = performance.now(); turnsSeen = 0;
+  const argv = buildArgv();
+  const jobs = !$("show").checked && $("parallel").checked ? cores() : 1;
+  if (jobs > 1) {
+    par = { jobs, workers: [worker], texts: new Map(), next: 0, totals: [], live: [], doneCount: 0, turn: [] };
+    for (let j = 1; j < jobs; j++) par.workers.push(createHelper(j));
+    par.workers.forEach((w, j) => w.postMessage({ type: "start", ants: teams, argv, jobs, job: j }));
+  } else {
+    par = null;
+    worker.postMessage({ type: "start", ants: teams, argv });
+  }
 };
-// Stop replaces the worker, so it also works when an ant is stuck in a loop.
-$("stopBtn").onclick = () => { stopGame(); createWorker(); $("status").textContent = "Stopped"; };
+// Stop replaces the workers, so it also works when an ant is stuck in a loop.
+$("stopBtn").onclick = () => { stopHelpers(); stopGame(); createWorker(); $("status").textContent = "Stopped"; };
+
+function createHelper(job) {
+  const w = new Worker(URL.createObjectURL(new Blob([$("worker-src").textContent], { type: "text/javascript" })));
+  w.onmessage = (e) => {
+    const m = e.data;
+    if (m.type === "frame") onParallelFrame(job, m);
+    else if (m.type === "error") { $("warnings").textContent += m.message + "\n"; }
+  };
+  w.postMessage({ type: "init", ants: WASM.map((a) => ({ name: a.name, bytes: a.bytes.slice() })), js: allJs() });
+  return w;
+}
+
+function stopHelpers() {
+  if (par) par.workers.slice(1).forEach((w) => w.terminate());
+  par = null;
+}
+
+function onParallelFrame(job, f) {
+  if (!par) return;
+  if (f.out) appendOut(f.out);                       // the header (job 0)
+  if (f.warnings && f.warnings.length) $("warnings").textContent += f.warnings.join("\n") + "\n";
+  for (const b of f.battleTexts || []) par.texts.set(b.index, b.text);
+  let text = "";
+  while (par.texts.has(par.next)) { text += par.texts.get(par.next); par.texts.delete(par.next); par.next++; }
+  if (text) appendOut(text);
+  par.live[job] = f.totals;
+  par.turn[job] = f.turn;
+  if (f.done) { par.totals[job] = f.rawTotals; par.doneCount++; }
+  renderStandings(mergeLive(par.live));
+  renderProgress(Math.min(par.next, f.numBattles), f.numBattles, `${par.jobs} workers`);
+  if (par.doneCount === par.jobs) {
+    // Merge (32-bit sums, as the original) and let worker 0 print the table.
+    const merged = par.totals[0].map((t) => ({ ...t }));
+    for (const tot of par.totals.slice(1)) {
+      tot.forEach((g, i) => { for (const k of Object.keys(g)) merged[i][k] = k === "TimeUsed" ? merged[i][k] + g[k] : (merged[i][k] + g[k]) >>> 0; });
+    }
+    worker.postMessage({ type: "finish", totals: merged });
+    return;
+  }
+  if (!f.done && running) par.workers[job].postMessage({ type: "run", show: false, budgetMs: 150, maxTurns: 0 });
+}
+
+function onFinished(m) {
+  appendOut(m.out);
+  renderResults(m.results);
+  stopHelpers();
+  finished = true; stopGame();
+  $("status").textContent = "Finished";
+}
 $("pauseBtn").onclick = () => {
   paused = !paused;
   $("pauseBtn").textContent = paused ? "Resume" : "Pause";
@@ -212,11 +303,15 @@ $("stepBtn").onclick = () => { if (paused && !inflight) { inflight = true; worke
 
 function onStarted(m) {
   running = true; paused = false; finished = false; inflight = false;
+  teamInfo = m.teams;
   $("startBtn").disabled = true; $("stopBtn").disabled = false;
   $("pauseBtn").disabled = false; $("pauseBtn").textContent = "Pause"; $("stepBtn").disabled = true;
   document.querySelectorAll("aside input, aside select, aside button:not(#stopBtn)").forEach((el) => { el.disabled = true; });
   $("status").textContent = `Seed ${m.seed}`;
-  pump();
+  if (par) {
+    $("pauseBtn").disabled = true;
+    par.workers.forEach((w) => w.postMessage({ type: "run", show: false, budgetMs: 150, maxTurns: 0 }));
+  } else pump();
 }
 
 function stopGame() {
@@ -238,6 +333,12 @@ function pump() {
 function onFrame(f) {
   inflight = false;
   if (f.out) appendOut(f.out);
+  if (f.turn && lastFrame && f.serial === lastFrame.serial) turnsSeen += Math.max(0, f.turn - lastFrame.turn);
+  else if (f.turn) turnsSeen += f.turn;
+  renderStandings(f.totals);
+  renderProgress(f.done ? f.numBattles : f.battle - 1, f.numBattles, "1 worker");
+  if (f.slots) renderBattleTable(f);
+  if (f.done && f.results) renderResults(f.results);
   if (f.warnings && f.warnings.length) $("warnings").textContent += f.warnings.join("\n") + "\n";
   lastFrame = f;
   if (f.slots) {
@@ -529,4 +630,81 @@ $("code").addEventListener("keydown", (e) => {
   const t = e.target, a = t.selectionStart;
   t.value = t.value.slice(0, a) + "  " + t.value.slice(t.selectionEnd);
   t.selectionStart = t.selectionEnd = a + 2;
+});
+
+// --- Live statistics, standings and final ratings ---------------------------------
+
+let teamInfo = [];   // [{name, color, memSize}] by team number - 1
+const pct1 = (num, den) => (den ? (100 * num / den).toFixed(1) : "0.0");
+const esc = (t) => String(t).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+const swatch = (c) => `<span class="sw" style="background:${hex(c)}"></span>`;
+
+function mergeLive(lists) {
+  const out = [];
+  for (const l of lists) {
+    if (!l) continue;
+    l.forEach((t, i) => {
+      const o = out[i] || (out[i] = { battles: 0, won: 0, basesBuilt: 0, born: 0, kill: 0, killed: 0 });
+      for (const k of Object.keys(o)) o[k] += t[k];
+    });
+  }
+  return out;
+}
+
+function renderProgress(done, total, how) {
+  const secs = (performance.now() - startTime) / 1000;
+  const rate = done / Math.max(secs, 0.001);
+  const eta = rate > 0 && done < total ? (total - done) / rate : 0;
+  const fmt = (t) => t >= 3600 ? `${Math.floor(t / 3600)}h ${Math.floor(t % 3600 / 60)}m` : t >= 60 ? `${Math.floor(t / 60)}m ${Math.floor(t % 60)}s` : `${Math.floor(t)}s`;
+  $("progress").textContent = `${done} / ${total} battles · ${fmt(secs)} elapsed` +
+    (eta ? ` · about ${fmt(eta)} left` : "") + (turnsSeen && !par ? ` · ${Math.round(turnsSeen / secs)} turns/s` : "") + ` · ${how}`;
+}
+
+// The current battle, one row per team.
+function renderBattleTable(f) {
+  const totalScore = f.slots.reduce((n, s) => n + s.ants + 75 * s.bases, 0) || 1;
+  const rows = f.slots.map((s) => {
+    const score = s.ants + 75 * s.bases;
+    return `<tr><td>${swatch(s.color)}${s.letter} ${esc(s.name)}</td><td>${score}</td><td>${pct1(score, totalScore)}%</td>
+      <td>${s.ants}</td><td>${s.bases}</td><td>${s.built - 1}</td><td>${s.born}</td><td>${s.kill}</td><td>${s.killed}</td>
+      <td>${pct1(s.kill, s.kill + s.killed)}%</td><td>${s.squares}</td><td>${s.nsPerCall || "–"}</td></tr>`;
+  }).join("");
+  const U = f.used;
+  $("battleTable").innerHTML = `<caption>Battle ${f.battle}: ${U.MapWidth}×${U.MapHeight}, ${U.StartAnts} start ants, food space ${U.NewFoodSpace}, piles ${U.NewFoodMin}–${U.NewFoodMin + U.NewFoodDiff} · turn ${f.turn} · ${f.numAnts} ants, ${f.numFood} food on the map</caption>
+    <tr><th>Team</th><th title="ants + 75 × bases">Score</th><th title="share of all scores; ${U.WinPercent}% wins (${U.HalfTimePercent}% after turn ${U.HalfTimeTurn})">Share</th><th>Ants</th><th>Bases</th><th title="bases built this battle">Built</th><th>Born</th><th>Kills</th><th>Deaths</th><th title="kills / (kills + deaths)">Comb</th><th title="squares owned">Territory</th><th title="ns per ant call (sampled)">ns/call</th></tr>${rows}`;
+}
+
+// Tournament standings so far, by win rate.
+function renderStandings(totals) {
+  if (!totals || !teamInfo.length) return;
+  const rows = totals.map((t, i) => ({ ...t, i })).filter((t) => t.battles > 0)
+    .sort((a, b) => (b.won / b.battles - a.won / a.battles) || b.won - a.won);
+  $("standTable").innerHTML = `<tr><th>#</th><th>Team</th><th>Battles</th><th>Won</th><th>Vict</th><th title="bases built per battle (incl. the start base)">Bases</th><th title="ants born per battle">Ants</th><th>Comb</th></tr>` +
+    rows.map((t, k) => `<tr><td>${k + 1}</td><td>${swatch(teamInfo[t.i].color)}${String.fromCharCode(65 + t.i)} ${esc(teamInfo[t.i].name)}</td><td>${t.battles}</td><td>${t.won}</td>
+      <td>${pct1(t.won, t.battles)}%</td><td>${(t.basesBuilt / t.battles).toFixed(1)}</td><td>${Math.round(t.born / t.battles)}</td><td>${pct1(t.kill, t.kill + t.killed)}%</td></tr>`).join("");
+}
+
+// The original final table, sortable. Values in tenths are shown as such.
+const RESULT_COLS = [
+  ["name", "Team"], ["battles", "Battles"], ["won", "Won"], ["bases", "Bases", 10], ["ants", "Ants"], ["size", "Size"],
+  ["ages", "Ages"], ["comb", "Comb", 10, "%"], ["time", "Time"], ["vict", "Vict", 10, "%"], ["perf", "Perf", 10, "%"], ["pres", "Pres", 10, "%"],
+];
+let resultRows = [], resultSort = "vict";
+function renderResults(rows) {
+  if (!rows) return;
+  resultRows = rows;
+  const total = rows.find((r) => r.team === 0);
+  const teamsOnly = rows.filter((r) => r.team !== 0).sort((a, b) =>
+    resultSort === "name" ? a.name.localeCompare(b.name) : (b[resultSort] - a[resultSort]) || (b.vict - a.vict));
+  const cell = (r, [k, , div, suffix]) => k === "name"
+    ? `${r.team ? swatch(teamInfo[r.team - 1] ? teamInfo[r.team - 1].color : 0) : ""}${esc(r.name)}`
+    : `${div ? (r[k] / div).toFixed(1) : r[k]}${suffix || ""}`;
+  $("resultTable").innerHTML = `<tr><th>#</th>${RESULT_COLS.map((c) => `<th data-sort="${c[0]}" class="${c[0] === resultSort ? "sorted" : ""}">${c[1]}</th>`).join("")}</tr>` +
+    teamsOnly.map((r, k) => `<tr><td>${k + 1}</td>${RESULT_COLS.map((c) => `<td>${cell(r, c)}</td>`).join("")}</tr>`).join("") +
+    (total ? `<tr class="total"><td></td>${RESULT_COLS.map((c) => `<td>${cell(total, c)}</td>`).join("")}</tr>` : "");
+  $("resultsBox").classList.remove("hidden");
+}
+$("resultTable").addEventListener("click", (e) => {
+  const th = e.target.closest("th[data-sort]");
+  if (th) { resultSort = th.dataset.sort; renderResults(resultRows); }
 });

@@ -125,6 +125,13 @@ export function scaleDiv(a, b, scale) {
   return Math.floor((((a + Math.floor(d / 2)) >>> 0)) / d);
 }
 
+// Copies len bytes; a plain loop for small brains (no view allocation), a
+// block copy for big ones.
+function copyBytes(dst, dOff, src, sOff, len) {
+  if (len <= 16) { for (let k = 0; k < len; k++) dst[dOff + k] = src[sOff + k]; }
+  else dst.set(src.subarray(sOff, sOff + len), dOff);
+}
+
 // printf-style padding helpers for output identical to the original.
 const padL = (v, w) => String(v).padStart(w);
 const padR = (v, w) => String(v).padEnd(w);
@@ -238,9 +245,14 @@ export class Game {
   // run it in slices. Mirrors main() of the original.
   *play() {
     const args = this.args;
-    this.printGameBegin();
+    if (!this.hooks.noHeader) this.printGameBegin();
     for (this.BattleCount = 0; this.BattleCount < args.NumBattles; this.BattleCount++) {
       let tc = TERM.CONTINUE, sc = SYS.CONTINUE;
+      // Parallel runs: battles handled elsewhere only advance the seed.
+      if (this.hooks.only && !this.hooks.only(this.BattleCount)) {
+        args.GameSeed = (Math.imul(args.GameSeed, 123456789) + 12345) >>> 0;
+        continue;
+      }
       let watchTeamSeen = args.WatchTeam === 0;
 
       // Set up the parameters for the battle.
@@ -304,13 +316,14 @@ export class Game {
         }
         if (this.hooks.battleExit) this.hooks.battleExit(this, tc);
         if (tc) this.printBattleResult(tc);
+        if (this.hooks.afterBattle) this.hooks.afterBattle(this, tc);
       } else {
         sc = SYS.SKIP;
         if (this.hooks.battleSkipped) this.hooks.battleSkipped(this);
       }
       if (sc !== SYS.RESTART) args.GameSeed = (Math.imul(args.GameSeed, 123456789) + 12345) >>> 0;
     }
-    this.printGameResult();
+    if (!this.hooks.noResult) this.printGameResult();
     this.finished = true;
   }
 
@@ -463,18 +476,19 @@ export class Game {
     this.fillSquare(felt, 16, up, shuffle, row);
 
     // Copy in the brains: the caller first, then the others on the square in
-    // square-list order (num - 1 of them), via the shared scratch buffer.
+    // square-list order (num - 1 of them). Past them the ant sees the shared
+    // scratch buffer's stale bytes, as in the original (see StaleSlots).
     const brains = this.brains, stride = this.stride, mem = runner.mem, temp = this.antTemp;
-    let n = 1;
     const extent = Math.min(mem.length, temp.length, (num + StaleSlots) * size);
+    let n = 1;
     if (size) {
-      temp.set(brains.subarray(ant * stride, ant * stride + size), 0);
+      copyBytes(mem, 0, brains, ant * stride, size);
       for (let a = this.sqFirst[sq]; a !== -1 && n < num; a = this.aNext[a]) {
         if (a === ant) continue;
-        temp.set(brains.subarray(a * stride, a * stride + size), n * size);
+        copyBytes(mem, n * size, brains, a * stride, size);
         n++;
       }
-      mem.set(temp.subarray(0, extent), 0);
+      if (extent > n * size) mem.set(temp.subarray(n * size, extent), n * size);
     }
 
     let retval;
@@ -487,14 +501,15 @@ export class Game {
       retval = runner.call(num);
     }
 
-    // Copy the brains back (and whatever the ant wrote past them).
+    // Copy the brains back, and everything up to extent into the shared
+    // scratch buffer (the original's AntTemp holds what the ant left there).
     if (size) {
       temp.set(mem.subarray(0, extent), 0);
-      brains.set(temp.subarray(0, size), ant * stride);
+      copyBytes(brains, ant * stride, temp, 0, size);
       n = 1;
       for (let a = this.sqFirst[sq]; a !== -1 && n < num; a = this.aNext[a]) {
         if (a === ant) continue;
-        brains.set(temp.subarray(n * size, n * size + size), a * stride);
+        copyBytes(brains, a * stride, temp, n * size, size);
         n++;
       }
     }
@@ -800,16 +815,24 @@ export class Game {
     pres[0] = Math.floor(pressum / NT);
 
     const pct = (v) => `${padL(Math.floor(v / 10), 4)}.${v % 10}%`;
+    // The table as data too (percentages and Bases in tenths), for the app.
+    this.results = [];
     this.out("\nTeam    Battles  Won Bases  Ants  Size  Ages   Comb   Time   Vict   Perf   Pres\n");
     for (let i = 1; i <= NT + 1; i++) {
       const t = i % (NT + 1), g = G[t];
-      this.out(padR(t ? this.team[t].name : "Tot./Aver.", 10) +
-        padL(g.NumBattles, 5) + padL(g.NumWon, 5) +
-        `${padL(Math.floor(base[t] / 10), 4)}.${base[t] % 10}` +
-        padL(scaleDiv(g.NumBorn, g.NumBattles, 1), 6) +
-        padL(scaleDiv(g.TimesRun, g.NumTurns, 1000), 6) +
-        padL(scaleDiv(g.DieAge, (g.NumBorn - g.NumAnts) >>> 0, 1000), 6) +
-        pct(comb[t]) + padL(time[t], 7) + pct(vict[t]) + pct(perf[t]) + pct(pres[t]) + "\n");
+      const row = {
+        team: t, name: t ? this.team[t].name : "Tot./Aver.",
+        battles: g.NumBattles, won: g.NumWon, bases: base[t],
+        ants: scaleDiv(g.NumBorn, g.NumBattles, 1),
+        size: scaleDiv(g.TimesRun, g.NumTurns, 1000),
+        ages: scaleDiv(g.DieAge, (g.NumBorn - g.NumAnts) >>> 0, 1000),
+        comb: comb[t], time: time[t], vict: vict[t], perf: perf[t], pres: pres[t],
+      };
+      this.results.push(row);
+      this.out(padR(row.name, 10) + padL(row.battles, 5) + padL(row.won, 5) +
+        `${padL(Math.floor(row.bases / 10), 4)}.${row.bases % 10}` +
+        padL(row.ants, 6) + padL(row.size, 6) + padL(row.ages, 6) +
+        pct(row.comb) + padL(row.time, 7) + pct(row.vict) + pct(row.perf) + pct(row.pres) + "\n");
     }
   }
 }
