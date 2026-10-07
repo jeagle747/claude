@@ -174,6 +174,9 @@ const now = (typeof performance !== "undefined" && performance.now)
 //   check(game) -> SYS code       SysCheck, after every turn
 //   battleExit(game, tc)          after a battle (tc = termination code)
 //   battleSkipped(game)           a battle was skipped (watch team not in it)
+//   baseBuilt(x, y, team)         a base was built (after the build)
+//   baseLost(x, y, owner, by)     a base is destroyed (before its removal)
+// Hooks only observe; they must not change the game or draw random numbers.
 export class Game {
   constructor(teams, args, hooks = {}) {
     this.teams = teams;
@@ -556,6 +559,7 @@ export class Game {
       this.NumBases++;
       this.BasesBuilt++;
       this.squareChanged(x, y);
+      if (this.hooks.baseBuilt) this.hooks.baseBuilt(x, y, team);
     }
 
     // Move?
@@ -566,6 +570,7 @@ export class Game {
       if (owner !== team) {
         while (this.sqAnts[sq2]) this.killAnt(this.sqFirst[sq2], team);
         if (this.sqBase[sq2]) {
+          if (this.hooks.baseLost) this.hooks.baseLost(nx, ny, owner, team);
           this.sqBase[sq2] = 0;
           this.stats[owner].NumBases--;
           this.NumBases--;

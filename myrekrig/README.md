@@ -1,13 +1,14 @@
-# MyreKrig JS
+# Ants51
 
-A re-creation of MyreKrig, the Danish ant-programming game by Aske Simon Christensen
+Ants51 is a re-creation of MyreKrig, the Danish ant-programming game by Aske Simon Christensen
 (1998–2003), as a JavaScript engine that can run the original C ants compiled to WebAssembly.
 See [SPEC.md](SPEC.md) for the rules and design.
 
 **Status:** proof of concept. Engine verified against the original engine; browser app with
-battle viewer, tournament runner and JavaScript ants.
+battle viewer, tournament runner and JavaScript ants, in the Amber Operations design
+(`docs/design/`).
 
-**To play:** run `node tools/build-html.mjs` and open `dist/myrekrig.html` in Chrome. It is one
+**To play:** run `node tools/build-html.mjs` and open `dist/ants51.html` in Chrome. It is one
 self-contained file and works offline.
 
 ## Layout
@@ -20,8 +21,10 @@ self-contained file and works offline.
 | `engine/trace.js` | Turn-by-turn state checksum and state dump, for comparison |
 | `ants/c/` | Legions, SkyNET and Rambo (by Jørn Holm); Kompas (by Claude, a competitive ant); Probe (example) |
 | `ants/js/` | Rambo and Probe ported to JavaScript (they play identically to the C versions) |
-| `ui/` | Browser app: page, viewer, worker |
-| `tools/build-html.mjs` | Bundles everything into `dist/myrekrig.html` |
+| `ui/` | Browser app: page (`app.html`, `app.css`, `app.js`) and simulation worker |
+| `ui/assets/` | Design tokens, motion CSS and icons from the artist (see `NOTICE.md`) |
+| `docs/design/` | The design specification: layout, battlefield, charts, events, data contract |
+| `tools/build-html.mjs` | Bundles everything into `dist/ants51.html` |
 | `tools/build-ants.mjs` | Compiles C ants to WebAssembly (`.cache/wasm/`) |
 | `tools/ant-compat.mjs` | Mechanical fixes for 2003-era sources (SPEC §4.3) |
 | `tools/wasm/` | The `Myre.h` and minimal C library used for WebAssembly ants |
@@ -61,9 +64,16 @@ leftovers from the previous battle.
 
 ### Browser app
 
-`node tools/build-html.mjs`, then open `dist/myrekrig.html`. The setup line takes the same
+`node tools/build-html.mjs`, then open `dist/ants51.html` (`--own-only` builds
+`dist/ants51-own.html` with only the ants in this repository). The setup line takes the same
 command (`mk --all b5 B10 n1000 s1`) and gives the same results as the terminal. Untick
 "Show battles" to run without display; "All cores" then runs battles in parallel.
+
+The live view shows the full map at a fixed whole-pixel scale (2× only when it fits), the lead
+of the leader over the runner-up against the win threshold, live standings (click a race to
+focus it), strength over turns, the battle timeline with halftime, and the events the engine
+reports (bases built and lost, lead changes, halftime, battle end). The presentation only
+observes the engine: the same setup line gives the same game with or without it.
 
 ### Tests
 

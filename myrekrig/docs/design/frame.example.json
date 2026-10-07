@@ -1,0 +1,91 @@
+{
+  "battleId": "demo-003",
+  "seq": 241,
+  "turn": 9820,
+  "map": {
+    "width": 530,
+    "height": 530
+  },
+  "mapRevision": 241,
+  "params": {
+    "baseValue": 75,
+    "halfTimeTurn": 10000,
+    "timeOutTurn": 20000,
+    "winPercent": 75,
+    "halfTimePercent": 60
+  },
+  "teams": [
+    {
+      "id": "A",
+      "name": "Triumfant",
+      "color": "#23d9ef",
+      "order": 0,
+      "ants": 1420,
+      "bases": 4
+    },
+    {
+      "id": "B",
+      "name": "Myresyre",
+      "color": "#ff7569",
+      "order": 1,
+      "ants": 955,
+      "bases": 3
+    },
+    {
+      "id": "C",
+      "name": "FirkAnt",
+      "color": "#a8dc57",
+      "order": 2,
+      "ants": 795,
+      "bases": 3
+    },
+    {
+      "id": "D",
+      "name": "Legions",
+      "color": "#9b84ff",
+      "order": 3,
+      "ants": 670,
+      "bases": 2
+    },
+    {
+      "id": "E",
+      "name": "Probe",
+      "color": "#f2d34f",
+      "order": 4,
+      "ants": 540,
+      "bases": 2
+    }
+  ],
+  "bases": [
+    {
+      "x": 63,
+      "y": 122,
+      "teamId": "C"
+    }
+  ],
+  "events": [
+    {
+      "id": "demo-003:32",
+      "battleId": "demo-003",
+      "turn": 9819,
+      "kind": "base-created",
+      "teamId": "C",
+      "x": 63,
+      "y": 122
+    }
+  ],
+  "history": [
+    {
+      "turn": 9820,
+      "strength": {
+        "A": 1720,
+        "B": 1180,
+        "C": 1020,
+        "D": 820,
+        "E": 690
+      }
+    }
+  ],
+  "outcome": null,
+  "exampleNote": "Abbreviated contract example: bases and history contain examples, not a complete map snapshot."
+}

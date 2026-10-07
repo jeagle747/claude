@@ -1,7 +1,8 @@
-// Simulation worker for the browser app. Runs the engine (engine.js and
-// wasm-ant.js are bundled in front of this file by tools/build-html.mjs) and
-// sends the page frames: the map as pixels, team stats, graph points and
-// the text output.
+// Simulation worker for Ants51. Runs the engine (engine.js, wasm-ant.js and
+// js-ant.js are bundled in front of this file by tools/build-html.mjs) and
+// sends the page frames following docs/design/DATA_CONTRACT.md: semantic map
+// cells (full snapshot, then dirty updates), per-team stats, the strength
+// history, and authoritative events observed from the engine.
 //
 // Messages from the page:
 //   {type:"init", ants:[{name, bytes}], js:[{id, source}]}  compile the ants
@@ -9,12 +10,11 @@
 //   {type:"start", ants:[names], argv:[...], jobs?, job?}  start a game; with
 //        jobs > 1 this worker plays only battles i with i % jobs === job and
 //        reports each battle's text separately (parallel runs)
+//   {type:"run", show, budgetMs, maxTurns}   run a slice, then reply with a frame
+//   {type:"view", on}                        start/stop sending map cells
+//   {type:"cmd", code}                       F1..F5 (SYS codes)
 //   {type:"finish", totals}                  print the final table for merged
 //                                            totals (parallel runs)
-//   {type:"run", show, budgetMs, maxTurns}   run a slice, then reply with a frame
-//   {type:"cmd", code}                       F1..F5 (SYS codes)
-//   {type:"options", territory, ants}        display options
-//   {type:"probe", x, y}                     contents of a square
 //   {type:"stop"}                            abandon the game
 
 /* global Game, defaultArgs, parseArgs, parseTitle, loadWasmAnt, compileJsAnt, BaseValue */
@@ -22,15 +22,17 @@
 const defs = new Map();
 let game = null, gen = null, done = true;
 let pendingCmd = 0;
-let opts = { territory: true, ants: true };
 let out = "";
 let warnings = [];
+let parallel = false, battleTexts = [], startTeams = null, startArgv = null;
 
 // Per-battle view state.
-let W = 0, H = 0, pix = null, palette = null, slots = 0;
-let graph = [], graphWin = [], graphSent = 0;
-let battleSerial = 0;
-let parallel = false, battleTexts = [], startTeams = null, startArgv = null;
+let battleId = 0, seq = 0, W = 0, H = 0, slots = 0;
+let viewing = true, needFull = true;
+let dirtyFlag = null, dirtyList = [];
+let history = [], historySent = 0;
+let events = [], eventSeq = 0, lastLeader = -1;
+let outcome = null;
 
 onmessage = (e) => {
   const m = e.data;
@@ -40,9 +42,8 @@ onmessage = (e) => {
     else if (m.type === "start") start(m);
     else if (m.type === "finish") finish(m);
     else if (m.type === "run") run(m);
+    else if (m.type === "view") { viewing = !!m.on; if (viewing) needFull = true; }
     else if (m.type === "cmd") pendingCmd = m.code;
-    else if (m.type === "options") { opts = { ...opts, ...m.options }; if (game && pix) repaint(); }
-    else if (m.type === "probe") probe(m);
     else if (m.type === "stop") { game = gen = null; done = true; }
   } catch (err) {
     postMessage({ type: "error", message: String(err && err.stack || err) });
@@ -84,8 +85,10 @@ function start(m) {
     return d;
   });
   const args = parseArgs(defaultArgs(), m.argv);
-  out = ""; warnings = []; battleSerial = 0; pendingCmd = 0;
+  out = ""; warnings = []; pendingCmd = 0; battleId = 0;
+  events = []; eventSeq = 0; outcome = null;
   parallel = (m.jobs || 1) > 1; battleTexts = []; startTeams = teams; startArgv = m.argv;
+  viewing = !parallel && m.view !== false;
   let cur = "";
   game = new Game(teams, args, {
     noHeader: parallel && m.job !== 0,
@@ -95,9 +98,20 @@ function start(m) {
     battleSkipped: parallel ? (g) => { battleTexts.push({ index: g.BattleCount, text: "" }); } : undefined,
     out: (s) => { if (parallel && game && game.Used && game.Used.BattleSize && !game.finished) cur += s; else out += s; },
     warn: (s) => { warnings.push(s); },
-    battleInit: (g) => { newBattleView(g); return true; },
-    squareChanged: (x, y) => { if (pix) pix[x + y * W] = colorOf(x + y * W); },
-    drawMap: (g) => { recordGraph(g); },
+    battleInit: (g) => { newBattle(g); return true; },
+    squareChanged: (x, y) => {
+      if (!viewing || !dirtyFlag) return;
+      const i = x + y * W;
+      if (!dirtyFlag[i]) { dirtyFlag[i] = 1; dirtyList.push(i); }
+    },
+    baseBuilt: (x, y, team) => addEvent("base-created", { slot: game.TeamIndex[team], x, y }),
+    baseLost: (x, y, owner, by) => addEvent("base-lost", { slot: game.TeamIndex[owner], by: game.TeamIndex[by], x, y }),
+    drawMap: (g) => afterTurn(g),
+    battleExit: (g, tc) => {
+      const reason = tc ? "?WHITE"[tc] || "?" : g.skipped ? "S" : g.broken ? "X" : "R";
+      outcome = { reason, winner: g.TeamIndex[g.Winner], turn: g.CurrentTurn };
+      addEvent("battle-ended", { slot: outcome.winner, reason: outcome.reason });
+    },
     check: () => { const c = pendingCmd; pendingCmd = 0; return c; },
   });
   gen = game.play();
@@ -106,22 +120,63 @@ function start(m) {
     teams: game.team.slice(1).map((t) => ({ name: t.name, color: t.color, memSize: t.memSize })) });
 }
 
+function newBattle(g) {
+  battleId++; seq = 0;
+  W = g.Used.MapWidth; H = g.Used.MapHeight; slots = g.Used.BattleSize;
+  dirtyFlag = new Uint8Array(W * H); dirtyList = [];
+  needFull = true;
+  history = Array.from({ length: slots }, () => []); historySent = 0;
+  // Unsent events of the previous battle (its end) stay queued; they carry
+  // their own battleId.
+  eventSeq = 0; lastLeader = -1; outcome = null;
+}
+
+function addEvent(kind, fields) {
+  if (!game || !game.Used || parallel) return;
+  events.push({ id: `${battleId}:${++eventSeq}`, battleId, turn: game.CurrentTurn, kind, ...fields });
+}
+
+// After every complete turn: strength history, leader changes, halftime.
+function afterTurn(g) {
+  const U = g.Used;
+  let best = -1, bestSlot = -1, tie = false;
+  for (let n = 0; n < slots; n++) {
+    const s = g.stats[g.BattleTeams[n]];
+    const v = s.NumAnts + BaseValue * s.NumBases;
+    history[n].push(v);
+    if (v > best) { best = v; bestSlot = n; tie = false; } else if (v === best) tie = true;
+  }
+  if (!tie && best > 0) {
+    if (lastLeader >= 0 && bestSlot !== lastLeader) addEvent("leader-changed", { slot: bestSlot, previous: lastLeader });
+    lastLeader = bestSlot;
+  }
+  if (g.CurrentTurn === U.HalfTimeTurn && slots > 1) addEvent("halftime", {});
+}
+
 // Runs turns for up to budgetMs (or maxTurns), then sends a frame.
 function run(m) {
   if (!game) return;
+  // Map cells are only tracked while the battle is shown; a full snapshot
+  // follows when the display comes back.
+  if (!m.show && viewing) { viewing = false; dirtyList = []; if (dirtyFlag) dirtyFlag.fill(0); }
+  else if (m.show && !viewing && !parallel) { viewing = true; needFull = true; }
   const t0 = performance.now();
   let turns = 0, ended = 0;
-  const startSerial = battleSerial;
+  const startBattle = battleId;
   while (!done) {
     const r = gen.next();
     if (r.done) { done = true; break; }
     turns++;
     // When showing battles, stop at the end of a battle so its final state
     // is drawn before the next battle starts.
-    if (m.show && r.value) { ended = r.value; break; }
+    if (m.show && r.value) {
+      ended = r.value;
+      outcome = { reason: "?WHITE"[r.value] || "?", winner: game.TeamIndex[game.Winner], turn: game.CurrentTurn };
+      break;
+    }
     if (m.maxTurns && turns >= m.maxTurns) break;
     if ((turns & 15) === 0 && performance.now() - t0 > m.budgetMs) break;
-    if (m.show && battleSerial !== startSerial) break;
+    if (m.show && battleId !== startBattle) break;
   }
   sendFrame(m.show, ended);
 }
@@ -129,113 +184,67 @@ function run(m) {
 function sendFrame(show, ended = 0) {
   const g = game;
   const frame = {
-    type: "frame",
-    done,
-    out, warnings,
-    battle: g.BattleCount + 1,
-    numBattles: g.args.NumBattles,
-    turn: g.CurrentTurn || 0,
-    serial: battleSerial,
-    ended,
+    type: "frame", done, out, warnings,
+    battleId, seq: ++seq,
+    battle: g.BattleCount + 1, numBattles: g.args.NumBattles,
+    turn: g.CurrentTurn || 0, ended,
     numAnts: g.NumAnts || 0, numFood: g.NumFood || 0,
     totals: g.totals.slice(1).map((t) => ({ battles: t.NumBattles, won: t.NumWon, basesBuilt: t.BasesBuilt,
       born: t.NumBorn, kill: t.Kill, killed: t.Killed })),
   };
+  const transfer = [];
   out = ""; warnings = [];
   if (parallel) { frame.battleTexts = battleTexts; battleTexts = []; }
   if (done) {
     frame.results = g.results || null;
     if (parallel) frame.rawTotals = g.totals;
   }
-  if (g.Used && g.Used.BattleSize && g.stats) {
+  if (g.Used && g.Used.BattleSize && g.stats && !parallel) {
     const U = g.Used;
-    frame.used = { ...U };
-    frame.slots = [];
+    frame.params = { baseValue: BaseValue, halfTimeTurn: U.HalfTimeTurn, timeOutTurn: U.TimeOutTurn,
+      winPercent: U.WinPercent, halfTimePercent: U.HalfTimePercent };
+    frame.map = { width: W, height: H, startAnts: U.StartAnts, foodSpace: U.NewFoodSpace,
+      foodMin: U.NewFoodMin, foodMax: U.NewFoodMin + U.NewFoodDiff };
+    frame.teams = [];
     for (let n = 0; n < U.BattleSize; n++) {
       const t = g.BattleTeams[n], s = g.stats[t];
-      frame.slots.push({ letter: String.fromCharCode(64 + t), name: g.team[t].name, color: g.team[t].color,
+      frame.teams.push({ slot: n, team: t, name: g.team[t].name, color: g.team[t].color,
         ants: s.NumAnts, bases: s.NumBases, squares: s.SquareOwn, born: s.NumBorn, built: s.BasesBuilt,
-        kill: s.Kill, killed: s.Killed, dieAge: s.DieAge, timesRun: s.TimesRun,
-        nsPerCall: s.TimesTimed ? Math.round(s.TimeUsed * 1e6 / s.TimesTimed) : 0 });
+        kill: s.Kill, killed: s.Killed, nsPerCall: s.TimesTimed ? Math.round(s.TimeUsed * 1e6 / s.TimesTimed) : 0 });
     }
-    frame.graph = graph.map((a) => a.slice(graphSent));
-    frame.graphWin = graphWin.slice(graphSent);
-    frame.graphFrom = graphSent;
-    graphSent = graphWin.length;
+    frame.history = { from: historySent, values: history.map((a) => a.slice(historySent)) };
+    historySent = history.length ? history[0].length : 0;
+    frame.events = events; events = [];
+    frame.outcome = outcome;
+    if (show && viewing && g.sqAnts && g.sqAnts.length === W * H) Object.assign(frame, cellPayload(g, transfer));
   }
-  if (show && pix) {
-    frame.W = W; frame.H = H;
-    frame.pixels = pix.slice().buffer;
-    postMessage(frame, [frame.pixels]);
-  } else {
-    postMessage(frame);
+  postMessage(frame, transfer);
+}
+
+// Semantic cells: slot (0 = unowned, 1.. = battle slot + 1), ants, food, base.
+function cellPayload(g, transfer) {
+  const slotOf = (sq) => (g.sqTeam[sq] ? g.TeamIndex[g.sqTeam[sq]] + 1 : 0);
+  if (needFull) {
+    needFull = false;
+    const N = W * H, team = new Uint8Array(N);
+    for (let i = 0; i < N; i++) team[i] = slotOf(i);
+    const ants = g.sqAnts.slice(), food = g.sqFood.slice(), base = g.sqBase.slice();
+    for (const i of dirtyList) dirtyFlag[i] = 0;
+    dirtyList = [];
+    transfer.push(team.buffer, ants.buffer, food.buffer, base.buffer);
+    return { cells: { full: true, team, ants, food, base } };
   }
-}
-
-// --- Map colours, as in the original X11/Windows viewer (SPEC §5.2) -------
-
-const rgba = (r, g, b) => (255 << 24 | b << 16 | g << 8 | r) >>> 0; // little-endian ImageData
-
-function newBattleView(g) {
-  battleSerial++;
-  W = g.Used.MapWidth; H = g.Used.MapHeight; slots = g.Used.BattleSize;
-  pix = new Uint32Array(W * H);
-  palette = new Uint32Array(9 + slots * 3);
-  for (let c = 0; c < palette.length; c++) {
-    if (c === 0) palette[c] = rgba(0, 0, 0);
-    else if (c <= 8) { const v = 0x27 + 0x18 * c; palette[c] = rgba(v, v, v); }
-    else {
-      const col = g.team[g.BattleTeams[Math.floor(c / 3) - 3]].color;
-      const r = (col >>> 16) & 0xff, gr = (col >>> 8) & 0xff, b = col & 0xff;
-      if (c % 3 === 0) palette[c] = rgba(r >> 2, gr >> 2, b >> 2);
-      else if (c % 3 === 1) palette[c] = rgba(r, gr, b);
-      else palette[c] = rgba((r >> 1) + 128, (gr >> 1) + 128, (b >> 1) + 128);
-    }
+  const n = dirtyList.length;
+  const idx = new Int32Array(n), vals = new Uint8Array(n * 4);
+  for (let k = 0; k < n; k++) {
+    const i = dirtyList[k];
+    dirtyFlag[i] = 0;
+    idx[k] = i;
+    vals[k * 4] = slotOf(i); vals[k * 4 + 1] = g.sqAnts[i]; vals[k * 4 + 2] = g.sqFood[i]; vals[k * 4 + 3] = g.sqBase[i];
   }
-  pix.fill(palette[0]);
-  graph = Array.from({ length: slots }, () => []);
-  graphWin = [];
-  graphSent = 0;
-}
-
-function colorOf(i) {
-  const g = game;
-  const ants = g.sqAnts[i], food = g.sqFood[i], team = g.sqTeam[i];
-  const ti = g.TeamIndex[team] * 3;
-  let c;
-  if (g.sqBase[i]) c = 8;
-  else if (ants && food) c = ti + 11;
-  else if (ants && opts.ants) c = ti + 10;
-  else if (opts.territory && team && !food) c = ti + 9;
-  else c = food < 29 ? (food + 3) >> 2 : 8;
-  return palette[c];
-}
-
-function repaint() {
-  if (!game.sqAnts || game.sqAnts.length !== W * H) return;
-  for (let i = 0; i < W * H; i++) pix[i] = colorOf(i);
-}
-
-function recordGraph(g) {
-  const U = g.Used;
-  let max = 0;
-  for (let n = 0; n < slots; n++) {
-    const s = g.stats[g.BattleTeams[n]];
-    const v = s.NumAnts + BaseValue * s.NumBases;
-    graph[n].push(v);
-    if (v > max) max = v;
-  }
-  const pct = g.CurrentTurn >= U.HalfTimeTurn ? U.HalfTimePercent : U.WinPercent;
-  graphWin.push(Math.floor(max * 100 / pct) - max);
-}
-
-function probe(m) {
-  const g = game;
-  if (!g || !g.sqAnts || m.x < 0 || m.y < 0 || m.x >= W || m.y >= H) return;
-  const i = m.x + m.y * W;
-  const team = g.sqTeam[i];
-  postMessage({ type: "probe", x: m.x, y: m.y, ants: g.sqAnts[i], food: g.sqFood[i], base: g.sqBase[i],
-    team: team ? g.team[team].name : "", letter: team ? String.fromCharCode(64 + team) : "" });
+  dirtyList = [];
+  transfer.push(idx.buffer, vals.buffer);
+  return { cells: { full: false, idx, vals } };
 }
 
 // Parallel runs: prints the final table for the totals merged by the page.

@@ -1,4 +1,4 @@
-// Browser test: opens dist/myrekrig.html from disk in headless Chromium, runs
+// Browser test: opens dist/ants51.html from disk in headless Chromium, runs
 // a game from a setup line, and checks the result text is identical to the
 // command-line engine (apart from the measured Time/Perf columns). Also
 // takes a screenshot of a battle being shown.
@@ -16,7 +16,7 @@ try { ({ chromium } = require("playwright")); }
 catch { ({ chromium } = require(join(execFileSync("npm", ["root", "-g"]).toString().trim(), "playwright"))); }
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
-const html = pathToFileURL(join(ROOT, "dist", "myrekrig.html")).href;
+const html = pathToFileURL(join(ROOT, "dist", "ants51.html")).href;
 const line = process.argv[2] || "Legions SkyNET Rambo -- n3 s12345";
 
 const mask = (out) => out.split("\n").map((l) =>
@@ -50,6 +50,7 @@ console.log(same ? "browser output identical to command line (except Time/Perf)"
 if (!same) { console.log("--- browser\n" + browserOut + "\n--- cli\n" + cliOut); }
 
 // 2. A JS ant in the browser equals the same JS ant on the command line.
+await page.click("#setupBtn");
 await page.fill("#setupLine", "Probe.js Legions Rambo.js -- n2 s7");
 await page.click("#applyLine");
 await page.click("#startBtn");
@@ -62,6 +63,7 @@ console.log(sameJs ? "JS ants: browser identical to command line" : "JS ants: DI
 
 // 3. A parallel run (all cores, no display) with the command-line syntax
 //    equals the terminal command, and fills the live and final tables.
+await page.click("#setupBtn");
 await page.uncheck("#show");
 await page.check("#parallel");
 const mkLine = "mk --ants Legions,SkyNET,Rambo,Kompas,A5 n8 b2 B3 s5";
@@ -81,6 +83,7 @@ console.log(`results table rows: ${resultRows}, standings rows: ${standRows}, pr
 const tablesOk = resultRows === 7 && standRows === 6;
 
 // 4. The editor: a new ant from the template compiles.
+await page.click("#setupBtn");
 await page.click("#newJs");
 await page.click("#saveJs");
 await page.waitForFunction(() => /^OK: MyAnt\.js/.test(document.getElementById("editorMsg").textContent), null, { timeout: 10000 });
@@ -91,7 +94,7 @@ await page.click("#closeJs");
 await page.check("#show");
 await page.fill("#setupLine", "Legions SkyNET Rambo -- n5 s99");
 await page.click("#applyLine");
-await page.fill("#speed", "3");
+await page.selectOption("#speed", "10");
 await page.click("#startBtn");
 await page.waitForFunction(() => /turn (\d+)/.test(document.getElementById("status").textContent) &&
   Number(/turn (\d+)/.exec(document.getElementById("status").textContent)[1]) > 400, null, { timeout: 60000 });
