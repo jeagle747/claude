@@ -1,12 +1,12 @@
-# Ants51
+# Ants 51
 
-Ants51 is a re-creation of MyreKrig, the Danish ant-programming game by Aske Simon Christensen
+Ants 51 is a re-creation of MyreKrig, the Danish ant-programming game by Aske Simon Christensen
 (1998–2003), as a JavaScript engine that can run the original C ants compiled to WebAssembly.
 See [SPEC.md](SPEC.md) for the rules and design.
 
 **Status:** proof of concept. Engine verified against the original engine; browser app with
-battle viewer, tournament runner and JavaScript ants, in the Amber Operations design
-(`docs/design/`).
+battle viewer, tournament runner and JavaScript ants, in the artist's Ants 51 design
+(handoff v2, `docs/design/`).
 
 **To play:** run `node tools/build-html.mjs` and open `dist/ants51.html` in Chrome. It is one
 self-contained file and works offline.
@@ -22,8 +22,8 @@ self-contained file and works offline.
 | `ants/c/` | Legions, SkyNET and Rambo (by Jørn Holm); Kompas (by Claude, a competitive ant); Probe (example) |
 | `ants/js/` | Rambo and Probe ported to JavaScript (they play identically to the C versions) |
 | `ui/` | Browser app: page (`app.html`, `app.css`, `app.js`) and simulation worker |
-| `ui/assets/` | Design tokens, motion CSS and icons from the artist (see `NOTICE.md`) |
-| `docs/design/` | The design specification: layout, battlefield, charts, events, data contract |
+| `ui/assets/` | Logo, favicons, theme tokens, motion CSS and layout helpers from the artist (see `NOTICE.md`) |
+| `docs/design/` | The design specification (v2): layout, colours, controls, events, website pages, acceptance |
 | `tools/build-html.mjs` | Bundles everything into `dist/ants51.html` |
 | `tools/build-ants.mjs` | Compiles C ants to WebAssembly (`.cache/wasm/`) |
 | `tools/ant-compat.mjs` | Mechanical fixes for 2003-era sources (SPEC §4.3) |
@@ -69,11 +69,12 @@ leftovers from the previous battle.
 command (`mk --all b5 B10 n1000 s1`) and gives the same results as the terminal. Untick
 "Show battles" to run without display; "All cores" then runs battles in parallel.
 
-The live view shows the full map at a fixed whole-pixel scale (2× only when it fits), the lead
-of the leader over the runner-up against the win threshold, live standings (click a race to
-focus it), strength over turns, the battle timeline with halftime, and the events the engine
-reports (bases built and lost, lead changes, halftime, battle end). The presentation only
-observes the engine: the same setup line gives the same game with or without it.
+The battle view has the progress bar in the header, playback and F1–F5 controls at the top,
+the full map, live standings, strength over turns and the lead over the runner-up. View
+settings are kept in the browser and never affect a game: theme (Obsidian or Champagne, under
+View), map scale (1× or 2×; the analysis moves below the map when it does not fit beside it),
+Distinct colours (replaces the races' own colours on screen only), and the territory, ants,
+base marker and motion layers. Clicking a race focuses it on the map and in the chart.
 
 ### Tests
 

@@ -1,0 +1,13 @@
+PASS Race-defined colours preserved; optional mapping stable against rank/list order
+PASS 530-cell boundary, manual 2x dimensions, narrow fallback and rectangular grid
+PASS Lead ratio uses top two; zero and tie handled
+PASS Standalone page loads offline, logo works, seven race rows and five shortcuts
+PASS 448-cell 2x map keeps right analysis at 1440
+PASS At 1024, same 2x choice retained, map centred and analysis below
+PASS Palette override restores original display colour
+PASS Theme preserves original race colour
+PASS Lead meter below chart; shortcut routes to explicit preview feedback
+PASS Narrow layouts do not overflow; full-cell map fallback used
+PASS No browser JavaScript errors
+
+Scope: offline reference/helpers only. See spec/05_ACCEPTANCE.md for production gates.

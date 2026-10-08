@@ -1,200 +1,197 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="obsidian">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Ants51</title>
+<title>Ants 51</title>
+<link rel="icon" type="image/svg+xml" href="{{FAVICON}}">
 <style>
 {{TOKENS}}
 {{MOTION}}
 {{STYLE}}
 </style>
+<script>
+  // Theme before first paint (the preference is read again by the app).
+  try { const p = JSON.parse(localStorage.getItem("ants51.prefs") || "{}"); if (p.theme === "champagne") document.documentElement.dataset.theme = "champagne"; } catch { /* no storage */ }
+</script>
 </head>
 <body>
-<svg width="0" height="0" style="position:absolute" aria-hidden="true">{{ICONS}}</svg>
-<div class="shell">
-  <header>
-    <div class="brand">
-      <span class="brand-mark" aria-hidden="true">▥</span>
-      <div>ANTS51<small id="brandSub">MYREKRIG RULES / SETUP</small></div>
+<div class="page">
+  <header class="mast">
+    <div class="identity">
+      <span class="logo logo-obsidian">{{LOGO_OBSIDIAN}}</span>
+      <span class="logo logo-champagne">{{LOGO_CHAMPAGNE}}</span>
+      <small id="battleLabel">No battle</small>
     </div>
-    <div class="phase" id="phase" role="status">READY</div>
-    <div class="run">
-      <span id="turnLabel"></span>
-      <button id="pauseBtn" disabled><svg class="ic"><use href="#ao-pause"/></svg><span>Pause</span></button>
-      <button id="stepBtn" disabled title="One turn (while paused)"><svg class="ic"><use href="#ao-step"/></svg><span class="sr-only">Step</span></button>
-      <label>Speed <select id="speed" title="Turns simulated per screen frame">
+    <div class="progress">
+      <div class="progress-label"><strong id="progressCaption">Battle progress</strong><span id="progressTurns"></span></div>
+      <div class="progress-track" id="progressTrack" role="progressbar" aria-label="Battle progress" aria-valuemin="0" aria-valuemax="1" aria-valuenow="0">
+        <div class="progress-fill" id="progressFill"></div>
+        <span class="half-mark" id="halfMark"></span>
+        <span class="end-mark" id="endMark"></span>
+      </div>
+      <div class="ticks"><span>0</span><span id="halfTick"></span><span id="endTick"></span></div>
+    </div>
+  </header>
+
+  <div class="controls">
+    <div class="group">
+      <button type="button" id="pauseBtn" class="resume" disabled>Pause</button>
+      <button type="button" id="stepBtn" disabled title="One turn while paused">Step</button>
+      <label class="speed-label">Speed <select id="speed" aria-label="Turns per screen frame">
         <option value="1">1×</option><option value="2">2×</option><option value="5">5×</option>
         <option value="10">10×</option><option value="25">25×</option><option value="50" selected>50×</option>
         <option value="100">100×</option><option value="250">250×</option><option value="1000">1000×</option>
         <option value="0">Max</option>
       </select></label>
-      <button id="setupBtn" title="Setup"><svg class="ic"><use href="#ao-settings"/></svg><span>Setup</span></button>
-      <button id="stopBtn" disabled>Stop</button>
+      <span class="meta" id="raceCount"></span>
+      <button type="button" id="setupBtn" disabled>Setup</button>
+      <button type="button" id="stopBtn" disabled>Stop</button>
     </div>
-  </header>
-  <div class="context">
-    <span><i class="dot"></i> <span id="battleLabel">NO BATTLE</span> <span class="muted" id="seedLabel"></span></span>
-    <span id="mapInfo"></span>
-    <span id="raceCount"></span>
-    <span class="muted" id="status">Loading ants…</span>
+    <div class="group display-tools">
+      <span class="meta">Map scale</span>
+      <button type="button" data-scale="1" aria-pressed="true">1×</button>
+      <button type="button" data-scale="2" aria-pressed="false">2×</button>
+      <button type="button" id="distinctBtn" aria-pressed="false">Distinct colours</button>
+      <details class="menu" id="viewMenu">
+        <summary>View</summary>
+        <div class="menu-body">
+          <label><input type="checkbox" id="optTerritory" checked> Territory</label>
+          <label><input type="checkbox" id="optAnts" checked> Ants without food</label>
+          <label><input type="checkbox" id="markers" checked> Base markers</label>
+          <label><input type="checkbox" id="motion" checked> Motion</label>
+          <div class="theme-choice" role="group" aria-label="Theme">
+            <button type="button" data-theme-choice="obsidian" aria-pressed="true">Obsidian</button>
+            <button type="button" data-theme-choice="champagne" aria-pressed="false">Champagne</button>
+          </div>
+        </div>
+      </details>
+    </div>
+  </div>
+
+  <div class="shortcuts" aria-label="Battle shortcuts">
+    <button type="button" data-cmd="1" disabled><kbd>F1</kbd>Skip battle</button>
+    <button type="button" data-cmd="2" disabled><kbd>F2</kbd>Interrupt</button>
+    <button type="button" data-cmd="3" disabled><kbd>F3</kbd>End tournament</button>
+    <button type="button" data-cmd="4" disabled><kbd>F4</kbd>Restart battle</button>
+    <button type="button" data-cmd="5" disabled><kbd>F5</kbd>Last battle</button>
+    <span class="meta" id="cmdHint">Available while a game runs</span>
+    <span class="mode-note" id="status">Loading ants…</span>
   </div>
 
   <!-- Setup -->
   <section id="setupView" class="setup">
     <div class="setup-grid">
-      <section class="panel">
-        <div class="panel-head"><h2>Races (in order)</h2><span>FIRST RACE STARTS IN THE CENTRE</span></div>
-        <div class="pad">
-          <ul id="teamList" class="team-list"></ul>
-          <div class="row"><select id="addSelect" class="grow" aria-label="Ant to add"></select><button id="addBtn">Add</button></div>
+      <section>
+        <div class="section-head"><h2>Races</h2><span class="meta">In order · the first starts in the centre</span></div>
+        <ul id="teamList" class="team-list"></ul>
+        <div class="row"><select id="addSelect" class="grow" aria-label="Ant to add"></select><button type="button" id="addBtn">Add</button></div>
+        <div class="row">
+          <button type="button" id="addYours">Add yours</button>
+          <button type="button" id="addAll" title="All C ants, in the command line's order">All ants</button>
+          <button type="button" id="clearTeams">Clear</button>
+        </div>
+      </section>
+      <section>
+        <div class="section-head"><h2>Game</h2><span class="meta">Original parameters</span></div>
+        <div class="row"><label for="pn">Battles</label><input id="pn" type="number" min="1" placeholder="100">
+          <label for="ps">Seed</label><input id="ps" type="number" min="0" placeholder="random">
+          <button type="button" id="newSeed" title="New random seed">New</button></div>
+        <div class="row"><label for="pz">Watch race</label><select id="pz"><option value="">(none)</option></select></div>
+        <details>
+          <summary>Battle parameters</summary>
+          <table class="params" id="paramTable"></table>
+          <p class="hint">Empty = original default. Each battle draws every value between min and max.</p>
+        </details>
+      </section>
+      <section>
+        <div class="section-head"><h2>Setup line</h2><span class="meta">Same as the terminal</span></div>
+        <input id="setupLine" type="text" spellcheck="false" aria-label="Setup line">
+        <div class="row"><button type="button" id="applyLine">Apply</button><button type="button" id="copyLine">Copy</button></div>
+        <p class="hint">E.g. <code>mk --all b5 B10 n1000 s1</code>. The same line gives the same game here and in the terminal.</p>
+      </section>
+      <section>
+        <div class="section-head"><h2>Run</h2></div>
+        <label class="check"><input type="checkbox" id="show" checked> Show battles</label>
+        <label class="check" title="Without display, run several battles at once on all processor cores"><input type="checkbox" id="parallel" checked> All cores when not showing</label>
+        <div class="row"><button type="button" id="startBtn" class="primary">Start</button></div>
+      </section>
+      <section class="wide">
+        <div class="section-head"><h2>JavaScript ants</h2><span class="meta">Saved in this browser</span></div>
+        <ul id="jsList" class="js-list"></ul>
+        <div class="row"><button type="button" id="newJs">New ant</button></div>
+        <section id="editor" class="editor hidden">
+          <div class="row"><strong id="editorTitle">JavaScript ant</strong><span class="hint" id="editorHint"></span></div>
+          <textarea id="code" spellcheck="false" aria-label="Ant source"></textarea>
+          <div id="editorMsg"></div>
           <div class="row">
-            <button id="addYours">Add yours</button>
-            <button id="addAll" title="All C ants, in the command line's order">All ants</button>
-            <button id="clearTeams">Clear</button>
+            <button type="button" id="saveJs" class="primary">Save &amp; check</button>
+            <button type="button" id="downloadJs">Download .js</button>
+            <button type="button" id="deleteJs">Delete</button>
+            <button type="button" id="closeJs">Close</button>
           </div>
-        </div>
-      </section>
-      <section class="panel">
-        <div class="panel-head"><h2>Game</h2><span>ORIGINAL PARAMETERS</span></div>
-        <div class="pad">
-          <div class="row"><label for="pn">Battles</label><input id="pn" type="number" min="1" placeholder="100">
-            <label for="ps">Seed</label><input id="ps" type="number" min="0" placeholder="random">
-            <button id="newSeed" title="New random seed">New</button></div>
-          <div class="row"><label for="pz">Watch race</label><select id="pz"><option value="">(none)</option></select></div>
-          <details>
-            <summary>Battle parameters</summary>
-            <table class="params" id="paramTable"></table>
-            <p class="hint">Empty = original default. Each battle draws every value between min and max.</p>
-          </details>
-        </div>
-      </section>
-      <section class="panel">
-        <div class="panel-head"><h2>Setup line</h2><span>SAME AS THE TERMINAL</span></div>
-        <div class="pad">
-          <input id="setupLine" type="text" spellcheck="false" aria-label="Setup line">
-          <div class="row"><button id="applyLine">Apply</button><button id="copyLine">Copy</button></div>
-          <p class="hint">E.g. <code>mk --all b5 B10 n1000 s1</code>. The same line gives the same game here and in the terminal.</p>
-        </div>
-      </section>
-      <section class="panel">
-        <div class="panel-head"><h2>Run</h2><span></span></div>
-        <div class="pad">
-          <label class="check"><input type="checkbox" id="show" checked> Show battles</label>
-          <label class="check" title="Without display, run several battles at once on all processor cores"><input type="checkbox" id="parallel" checked> All cores when not showing</label>
-          <div class="row"><button id="startBtn" class="primary"><svg class="ic"><use href="#ao-play"/></svg>Start</button></div>
-        </div>
-      </section>
-      <section class="panel wide">
-        <div class="panel-head"><h2>JavaScript ants</h2><span>SAVED IN THIS BROWSER</span></div>
-        <div class="pad">
-          <ul id="jsList" class="js-list"></ul>
-          <div class="row"><button id="newJs">New ant</button></div>
-          <section id="editor" class="editor hidden">
-            <div class="row"><strong id="editorTitle">JavaScript ant</strong><span class="hint" id="editorHint"></span></div>
-            <textarea id="code" spellcheck="false" aria-label="Ant source"></textarea>
-            <div id="editorMsg"></div>
-            <div class="row">
-              <button id="saveJs" class="primary">Save &amp; check</button>
-              <button id="downloadJs">Download .js</button>
-              <button id="deleteJs">Delete</button>
-              <button id="closeJs">Close</button>
-            </div>
-          </section>
-        </div>
+        </section>
       </section>
     </div>
   </section>
 
   <!-- Live battle -->
-  <main id="liveView" class="hidden">
-    <section class="map-panel panel">
-      <div class="panel-head"><h1>Battlefield</h1><span class="muted">FULL MAP · FIXED CELL SCALE</span></div>
-      <div class="map-wrap" id="mapWrap">
-        <canvas id="map" aria-label="Battlefield" width="64" height="64"></canvas>
-        <canvas id="overlay" aria-hidden="true"></canvas>
-      </div>
-      <div class="map-key">
-        <span><i class="key-ant"></i>Ants</span>
-        <span><i class="key-food"></i>Food</span>
-        <span><i class="key-base"></i>Base</span>
-        <label><input id="markers" type="checkbox" checked> Base markers</label>
-      </div>
-      <div class="map-key opts">
-        <label><input id="optTerritory" type="checkbox" checked> Territory</label>
-        <label><input id="optAnts" type="checkbox" checked> Ants without food</label>
-        <label><input id="motion" type="checkbox" checked> Motion</label>
-      </div>
-      <div id="probe" class="probe">Hover a cell to inspect counts · click a race row to focus it</div>
-    </section>
-    <section class="analytics">
-      <div class="lead panel" id="leadPanel">
-        <div class="lead-head"><span>LEAD OVER RUNNER-UP <span id="pair"></span></span><strong id="leadValue">—</strong></div>
-        <div class="meter"><div id="leadFill"></div><i id="thresholdTick"></i></div>
-        <div class="meter-labels"><span>Leader ÷ (leader + runner-up)</span><span id="thresholdLabel"></span></div>
-      </div>
-      <section class="standings panel">
-        <div class="panel-head">
-          <h2>Live standings</h2>
-          <span id="focusLabel">ALL RACES</span>
-          <span><button id="moreStats" class="quiet" aria-pressed="false">More stats</button><button id="clearFocus" class="quiet">Clear focus</button></span>
+  <main id="liveView" class="workspace hidden">
+    <section class="map-area">
+      <div class="map-head"><h2>Battlefield</h2><span class="meta" id="mapInfo"></span></div>
+      <div class="canvas-frame">
+        <div class="map-wrap" id="mapWrap">
+          <canvas id="map" width="64" height="64" role="img" aria-label="Battlefield"></canvas>
+          <canvas id="overlay" aria-hidden="true"></canvas>
         </div>
+        <div class="notice" id="mapNotice" hidden><p id="mapNoticeText"></p><button type="button" id="useOne">Use 1×</button></div>
+      </div>
+      <div class="map-foot"><span id="paletteLabel">Race-defined colours</span><span id="probe">No zoom · Full battlefield</span></div>
+    </section>
+    <aside class="analysis" id="analysis">
+      <section class="standings-section">
+        <div class="section-head"><h2>Live standings</h2>
+          <span><button type="button" id="moreStats" class="quiet" aria-pressed="false">More stats</button><button type="button" id="clearFocus" class="quiet" disabled>Clear focus</button></span></div>
         <table id="standings"><thead id="standHead"></thead><tbody id="rows"></tbody></table>
       </section>
-      <section class="chart-panel panel">
-        <div class="panel-head"><h2>Strength over turns</h2><span>ANTS + 75 × BASES</span></div>
-        <div id="legend" class="legend"></div>
-        <canvas id="chart" aria-label="Strength history; the standings table has the same values"></canvas>
-        <div id="chartReadout" class="chart-readout">Hover chart for turn and strength · letters stay with their races</div>
+      <section class="chart-section">
+        <div class="section-head"><h2>Strength over turns</h2><span class="meta">Ants + <span id="baseValue">75</span> × bases</span></div>
+        <div class="chart-wrap">
+          <canvas id="chart" tabindex="0" aria-label="Strength over turns. Arrow keys move the cursor; the standings table has the same values."></canvas>
+          <div id="chartTip" class="chart-tip" hidden></div>
+        </div>
+        <div class="lead" id="leadPanel">
+          <div class="lead-head"><span>Lead over runner-up</span><strong id="leadValue">—</strong></div>
+          <div class="ratio-track"><div class="ratio-fill" id="leadFill"></div><span class="threshold" id="thresholdTick"></span></div>
+          <div class="lead-caption"><span id="pair"></span><span id="thresholdLabel"></span></div>
+        </div>
       </section>
-    </section>
+    </aside>
   </main>
-  <section id="liveFooter" class="footer-panels hidden">
-    <div class="timeline-panel panel">
-      <div class="panel-head"><h2>Battle progress</h2><span id="remaining"></span></div>
-      <div class="timeline"><div id="progressFill"></div><i id="halfMarker"></i><b id="playhead"></b></div>
-      <div class="timeline-labels"><span>0</span><span id="halfLabel">HALFTIME</span><span id="fullLabel">FULLTIME</span></div>
-      <div class="keys" aria-label="Battle controls">
-        <button data-cmd="1" title="F1">F1 Skip battle</button>
-        <button data-cmd="2" title="F2">F2 Interrupt</button>
-        <button data-cmd="3" title="F3 / Esc">F3 End tournament</button>
-        <button data-cmd="4" title="F4">F4 Restart battle</button>
-        <button data-cmd="5" title="F5">F5 Last battle</button>
-      </div>
-    </div>
-    <div class="events panel">
-      <div class="panel-head"><h2>Recent events</h2><button id="historyBtn" class="quiet"><svg class="ic"><use href="#ao-history"/></svg>History <span id="eventCount"></span></button></div>
-      <div id="events"></div>
-    </div>
-  </section>
 
   <!-- Tournament -->
   <section id="tourView" class="tour hidden">
-    <div class="panel">
-      <div class="panel-head"><h2>Tournament</h2><span id="progress"></span></div>
-      <div class="tour-grid">
-        <div><h3>Standings so far</h3><table id="standTable" class="stats"></table></div>
-        <div id="resultsBox" class="hidden"><h3>Final ratings</h3><table id="resultTable" class="stats"></table>
-          <p class="hint">The original's final table; click a column to sort. <b>Vict</b> battles won ·
-            <b>Perf</b> Vict × median CPU time ÷ own · <b>Pres</b> Vict × median brain size ÷ own ·
-            <b>Comb</b> kills ÷ (kills + deaths) · <b>Bases</b> built per battle · <b>Ants</b> born per battle ·
-            <b>Size</b> average live ants · <b>Ages</b> average age at death · <b>Time</b> ns per ant call (measured).</p></div>
-      </div>
-      <details class="out-box" open><summary>Original output</summary><pre id="out"></pre></details>
-      <div id="warnings"></div>
+    <div class="section-head"><h2>Tournament</h2><span class="meta" id="progress"></span></div>
+    <div class="tour-grid">
+      <div><h3>Standings so far</h3><table id="standTable" class="stats"></table></div>
+      <div id="resultsBox" class="hidden"><h3>Final ratings</h3><table id="resultTable" class="stats"></table>
+        <p class="hint">The original's final table; click a column to sort. <b>Vict</b> battles won ·
+          <b>Perf</b> Vict × median CPU time ÷ own · <b>Pres</b> Vict × median brain size ÷ own ·
+          <b>Comb</b> kills ÷ (kills + deaths) · <b>Bases</b> built per battle · <b>Ants</b> born per battle ·
+          <b>Size</b> average live ants · <b>Ages</b> average age at death · <b>Time</b> ns per ant call (measured).</p></div>
     </div>
+    <details class="out-box" open><summary>Original output</summary><pre id="out"></pre></details>
+    <div id="warnings"></div>
   </section>
 
-  <aside id="historyDrawer" class="drawer hidden" role="dialog" aria-label="Event history">
-    <div class="panel-head"><h2>Event history</h2><button id="closeHistory" class="quiet" aria-label="Close"><svg class="ic"><use href="#ao-close"/></svg></button></div>
-    <div id="historyList" class="history-list"></div>
-  </aside>
   <div id="announcer" class="sr-only" aria-live="polite"></div>
-
-  <footer>ANTS51 <span>MYREKRIG RULES 2.4.7 · VERIFIED AGAINST THE ORIGINAL ENGINE</span><span id="sizeNotice"></span></footer>
+  <footer class="note"><span>Ants 51 · MyreKrig rules 2.4.7 · verified against the original engine</span><span id="layoutLabel"></span></footer>
 </div>
 <script type="application/json" id="ants-data">{{ANTS}}</script>
 <script type="text/plain" id="worker-src">{{WORKER}}</script>
+<script>
+{{PRESENTATION}}
+</script>
 <script>
 {{APP}}
 </script>

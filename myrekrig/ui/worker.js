@@ -1,6 +1,6 @@
-// Simulation worker for Ants51. Runs the engine (engine.js, wasm-ant.js and
+// Simulation worker for Ants 51. Runs the engine (engine.js, wasm-ant.js and
 // js-ant.js are bundled in front of this file by tools/build-html.mjs) and
-// sends the page frames following docs/design/DATA_CONTRACT.md: semantic map
+// sends the page frames following docs/design/03_DATA_CONTRACT.md: semantic map
 // cells (full snapshot, then dirty updates), per-team stats, the strength
 // history, and authoritative events observed from the engine.
 //

@@ -1,8 +1,14 @@
-@keyframes alert-breathe { 0%,100% {box-shadow:0 0 0 0 #ffbe4800;border-color:#705629} 50% {box-shadow:0 0 0 3px #ffbe4812;border-color:var(--amber)} }
-@keyframes leader-confirm {0%,100% {background-color:transparent} 28%,70% {background-color:#ffbe481b} }
-@keyframes toast-enter {from {opacity:0;transform:translateY(4px)} to {opacity:1;transform:translateY(0)} }
-.near {animation:alert-breathe var(--alert-period) ease-in-out infinite}
-.leader-flash {animation:leader-confirm var(--leader-ms) ease-in-out 1}
-.event-new {animation:toast-enter 160ms ease-out 1}
-@media (prefers-reduced-motion: reduce) {*,*::before,*::after {animation:none!important;transition:none!important;scroll-behavior:auto!important}.near {border-color:var(--amber)!important;box-shadow:none!important}}
-[data-motion="off"] *,[data-motion="off"] *::before,[data-motion="off"] *::after {animation:none!important;transition:none!important}
+/* Apply only after receiving an authoritative engine event. */
+@keyframes a51-alert { 0%,100% { opacity:.45 } 50% { opacity:1 } }
+@keyframes a51-created { from { transform:scale(.25); opacity:1 } to { transform:scale(1); opacity:0 } }
+@keyframes a51-lost { from { transform:scale(1); opacity:1 } to { transform:scale(.375); opacity:0 } }
+.a51-alert-indicator { animation:a51-alert 1600ms ease-in-out infinite }
+.a51-base-created { animation:a51-created 650ms ease-out both; transform-origin:center; pointer-events:none }
+.a51-base-lost { animation:a51-lost 480ms ease-out both; transform-origin:center; pointer-events:none }
+@media (prefers-reduced-motion:reduce) {
+  .a51-alert-indicator,.a51-base-created,.a51-base-lost { animation:none; transform:none; opacity:1 }
+}
+[data-motion="off"] .a51-alert-indicator,
+[data-motion="off"] .a51-base-created,
+[data-motion="off"] .a51-base-lost { animation:none; transform:none; opacity:1 }
+/* JS must remove stationary reduced-motion event outlines after 650ms. */

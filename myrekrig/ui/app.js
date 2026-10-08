@@ -1,7 +1,8 @@
-// Ants51 browser app: setup, live battle view and tournament results, in the
-// Amber Operations design (docs/design/). The simulation runs in a worker
+// Ants 51 browser app: setup, live battle view and tournament results, in the
+// design of docs/design/ (handoff v2). The simulation runs in a worker
 // (ui/worker.js); this file only presents the frames and events it sends and
-// never affects the game.
+// never affects the game. Display settings (theme, scale, colours) are view
+// preferences only.
 
 const PARAMS = [
   ["MapWidth", "w", "auto"], ["MapHeight", "h", "auto"], ["StartAnts", "a", "15–40"],
@@ -14,26 +15,32 @@ const BY_CLAUDE = ["Kompas", "Probe", "Probe.js"];
 const USES_GLOBALS = ["myresyre", "borg", "GridAnt"];
 // Termination letters of the original (W H I T E) plus the ways a shown
 // battle can stop early.
-const REASONS = { W: "WIN", H: "HALFTIME WIN", I: "INTERRUPTED", T: "TIMEOUT", E: "ERROR",
-  S: "SKIPPED", R: "RESTARTED", X: "TOURNAMENT ENDED", "?": "ENDED" };
+const REASONS = { W: "Win", H: "Halftime win", I: "Interrupted", T: "Timeout", E: "Error",
+  S: "Skipped", R: "Restarted", X: "Tournament ended", "?": "Ended" };
 
+const AP = window.Ants51Presentation;   // ui/assets/presentation.js
 const $ = (id) => document.getElementById(id);
 const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const fmt = (n) => Number(n).toLocaleString("en-US");
 const hexOf = (c) => "#" + (c & 0xffffff).toString(16).padStart(6, "0");
-const icon = (id) => `<svg class="ic" aria-hidden="true"><use href="#ao-${id}"/></svg>`;
 const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 const letterOf = (n) => (n < 26 ? String.fromCharCode(65 + n) : String(n + 1));
 const pct1 = (num, den) => (den ? (100 * num / den).toFixed(1) : "0.0");
 const swatch = (c) => `<span class="sw" style="background:${hexOf(c)}"></span>`;
-
-// Display colours belong to battle slots A–J (tokens.css); from the 11th
-// slot on, the ant's own colour is used.
-const SLOT_COLORS = "abcdefghij".split("").map((l) => parseInt(css(`--team-${l}`).slice(1), 16));
-const DANGER = css("--danger") || "#ff6975";
-const AMBER = css("--amber") || "#ffbe48";
 const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
-const motionOn = () => $("motion").checked && !reducedMotion.matches;
+
+// --- Preferences (view only, never part of a game) ---------------------------------
+
+const PREFS_KEY = "ants51.prefs";
+const prefs = Object.assign({ theme: "obsidian", scale: 1, colorMode: "defined", motion: true,
+  baseMarkers: true, territory: true, antsLayer: true }, (() => {
+  try { return JSON.parse(localStorage.getItem(PREFS_KEY) || "{}"); } catch { return {}; }
+})());
+if (![1, 2].includes(prefs.scale)) prefs.scale = 1;
+function savePrefs() {
+  try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch { /* storage unavailable */ }
+}
+const motionOn = () => prefs.motion && !reducedMotion.matches;
 
 // --- State --------------------------------------------------------------------
 
@@ -44,6 +51,7 @@ let showing = true;       // the current run shows battles
 let view = "setup";
 let outText = "";
 let teamInfo = [];        // [{name, color, memSize}] by team number - 1
+let runIds = [];          // ant ids of the running game, by team number - 1 (stable race IDs)
 let startTime = 0, turnsSeen = 0, lastTurnFrame = null, numBattles = 0, seed = "";
 let liveTotals = null, lastTour = 0;
 
@@ -137,7 +145,7 @@ function renderTeams() {
         <span class="name" title="${esc(a.name)}">${esc(id)}</span><span class="tag">${tags}</span>
         <button data-up="${i}" ${i ? "" : "disabled"} title="Move up" aria-label="Move ${esc(id)} up">▲</button>
         <button data-down="${i}" ${i < teams.length - 1 ? "" : "disabled"} title="Move down" aria-label="Move ${esc(id)} down">▼</button>
-        <button data-del="${i}" title="Remove" aria-label="Remove ${esc(id)}">${icon("close")}</button></li>`;
+        <button data-del="${i}" title="Remove" aria-label="Remove ${esc(id)}">✕</button></li>`;
     }).join("");
   }
   const z = $("pz"), old = z.value;
@@ -237,6 +245,7 @@ $("applyLine").onclick = () => applyLine($("setupLine").value);
 $("copyLine").onclick = () => navigator.clipboard && navigator.clipboard.writeText($("setupLine").value);
 $("newSeed").onclick = () => { $("ps").value = Math.floor(Math.random() * 4294967296); updateLine(); };
 
+
 // --- Views ----------------------------------------------------------------------
 
 function setView(v) {
@@ -244,13 +253,11 @@ function setView(v) {
   const live = v === "run" && showing && !par;
   $("setupView").classList.toggle("hidden", v === "run");
   $("liveView").classList.toggle("hidden", !live);
-  $("liveFooter").classList.toggle("hidden", !live);
   $("tourView").classList.toggle("hidden", v !== "run");
   $("setupBtn").disabled = v === "setup" && !hasRun;
-  $("setupBtn").querySelector("span").textContent = v === "setup" ? "Battle" : "Setup";
+  $("setupBtn").textContent = v === "setup" ? "Battle" : "Setup";
   $("setupBtn").title = v === "setup" ? "Back to the battle" : "Setup";
-  $("brandSub").textContent = `MYREKRIG RULES / ${v === "setup" ? "SETUP" : live ? "LIVE BATTLE" : "TOURNAMENT"}`;
-  if (live) { resize(); scheduleRender(); }
+  if (live) { layoutView(); scheduleRender(); }
 }
 $("setupBtn").onclick = () => setView(view === "setup" ? "run" : "setup");
 
@@ -269,6 +276,7 @@ $("startBtn").onclick = () => {
   $("resultsBox").classList.add("hidden");
   $("standTable").innerHTML = ""; $("progress").textContent = "";
   startTime = performance.now(); turnsSeen = 0; lastTurnFrame = null; liveTotals = null;
+  runIds = [...teams];
   resetLive();
   const argv = buildArgv();
   const jobs = !$("show").checked && $("parallel").checked ? cores() : 1;
@@ -285,7 +293,7 @@ $("startBtn").onclick = () => {
 $("stopBtn").onclick = () => {
   stopHelpers(); stopGame(); createWorker();
   $("status").textContent = "Stopped";
-  setPhase("STOPPED", "ended");
+  setCaption("Stopped");
 };
 
 function createHelper(job) {
@@ -314,12 +322,11 @@ function onStarted(m) {
   document.querySelectorAll("#setupView input, #setupView select, #setupView button").forEach((el) => {
     if (el.id !== "show" || par) el.disabled = true;
   });
-  $("seedLabel").textContent = `SEED ${seed}`;
-  $("battleLabel").textContent = `${fmt(numBattles)} BATTLE${numBattles === 1 ? "" : "S"}`;
-  $("raceCount").textContent = `${teamInfo.length} RACES`;
-  $("mapInfo").textContent = "";
+  updateShortcuts();
+  $("battleLabel").textContent = `Seed ${seed}`;
+  $("raceCount").textContent = `${teamInfo.length} races`;
   $("status").textContent = `Seed ${seed}`;
-  setPhase(par ? `TOURNAMENT · ${par.jobs} WORKERS` : showing ? "STARTING" : "TOURNAMENT");
+  if (!showing) tourHeader(0);
   setView("run");
   if (par) par.workers.forEach((w) => w.postMessage({ type: "run", show: false, budgetMs: 150, maxTurns: 0 }));
   else pump();
@@ -331,19 +338,28 @@ function stopGame() {
   $("startBtn").disabled = false; $("stopBtn").disabled = true;
   $("pauseBtn").disabled = true; $("stepBtn").disabled = true;
   document.querySelectorAll("#setupView input, #setupView select, #setupView button").forEach((el) => { el.disabled = false; });
+  updateShortcuts();
   renderTeams();
   renderJsList();
 }
 
+// F1–F5 work on a running game in this window; a run on all cores has no
+// single battle to command.
+function updateShortcuts() {
+  const on = running && !par;
+  document.querySelectorAll("[data-cmd]").forEach((b) => { b.disabled = !on; });
+  $("cmdHint").textContent = on ? "" : running ? "Not available while running on all cores" : "Available while a game runs";
+}
+
 function setPauseLabel() {
-  $("pauseBtn").innerHTML = paused ? `${icon("play")}<span>Resume</span>` : `${icon("pause")}<span>Pause</span>`;
-  $("pauseBtn").setAttribute("aria-pressed", String(paused));
+  $("pauseBtn").textContent = paused ? "Resume" : "Pause";
 }
 $("pauseBtn").onclick = () => {
   if (!running || par) return;
   paused = !paused;
   setPauseLabel();
   $("stepBtn").disabled = !paused;
+  if (paused) $("status").textContent = `Paused · ${$("status").textContent.replace(/^Paused · /, "")}`;
   if (!paused) pump();
 };
 $("stepBtn").onclick = () => {
@@ -381,8 +397,8 @@ function onFrame(f) {
     return;
   }
   renderTour(f.battle - 1, false);
-  $("status").textContent = `Battle ${f.battle} / ${f.numBattles} · turn ${f.turn}`;
-  if (!showing) setPhase(`BATTLE ${f.battle} / ${f.numBattles} · TURN ${fmt(f.turn)}`);
+  $("status").textContent = `${paused ? "Paused · " : ""}Battle ${f.battle} / ${f.numBattles} · turn ${f.turn}`;
+  if (!showing) tourHeader(f.battle - 1, `Battle ${f.battle} · turn ${fmt(f.turn)}`);
   if (!running || paused) return;
   if (!showing || document.hidden) setTimeout(pump, 0);
   else if (f.ended) setTimeout(pump, 1200);   // let the final state of a battle be seen
@@ -392,7 +408,7 @@ function onFrame(f) {
 function finishRun() {
   stopGame();
   $("status").textContent = "Finished";
-  if (!B || !B.outcome) setPhase("TOURNAMENT FINISHED", "ended");
+  if (!showing || !B) tourHeader(numBattles, "Finished");
   scheduleRender();
 }
 
@@ -407,8 +423,9 @@ function onParallelFrame(job, f) {
   par.live[job] = f.totals;
   if (f.done) { par.totals[job] = f.rawTotals; par.doneCount++; }
   liveTotals = mergeLive(par.live);
-  renderTour(Math.min(par.next, f.numBattles), par.doneCount === par.jobs);
-  setPhase(`TOURNAMENT · ${Math.min(par.next, f.numBattles)} / ${f.numBattles} BATTLES`);
+  const done = Math.min(par.next, f.numBattles);
+  renderTour(done, par.doneCount === par.jobs);
+  tourHeader(done, `${par.jobs} workers`);
   if (par.doneCount === par.jobs) {
     // Merge (32-bit sums, as the original) and let worker 0 print the table.
     const merged = par.totals[0].map((t) => ({ ...t }));
@@ -436,30 +453,67 @@ function appendOut(s) {
   if (atBottom) pre.scrollTop = pre.scrollHeight;
 }
 
+// --- Header progress ------------------------------------------------------------------
+
+function setCaption(text, result = false) {
+  $("progressCaption").textContent = text;
+  $("progressCaption").classList.toggle("result", result);
+}
+
+// Without a shown battle the header bar shows the tournament's progress.
+function tourHeader(done, note) {
+  const total = Math.max(1, numBattles);
+  setCaption(note === "Finished" ? "Tournament finished" : "Tournament progress", note === "Finished");
+  $("progressTurns").textContent = `${fmt(done)} / ${fmt(numBattles)} battles${note && note !== "Finished" ? ` · ${note}` : ""}`;
+  $("progressFill").style.width = `${Math.min(100, 100 * done / total)}%`;
+  $("progressTrack").setAttribute("aria-valuemax", String(total));
+  $("progressTrack").setAttribute("aria-valuenow", String(done));
+  $("halfMark").hidden = true; $("halfTick").textContent = "";
+  $("endMark").className = "end-mark";
+  $("endTick").textContent = fmt(numBattles);
+}
+
 // --- Battle state -----------------------------------------------------------------
 
-let B = null, prevB = null;      // the shown battle, and the one before it
+let B = null;                    // the shown battle
 let focusTeam = 0;               // focused race by tournament team number (0 = none)
-let scale = 1;
+let scale = prefs.scale;
 let rafPending = false, lastTables = 0, lastChart = 0;
 let lastEvent = { b: 0, s: 0 };  // dedup: events arrive in (battleId, seq) order
+let distinctRegistry = {};       // raceId -> palette colour while Distinct colours is on
 
 function resetLive() {
-  B = prevB = null;
+  B = null;
   lastEvent = { b: 0, s: 0 };
-  log = []; totalEvents = 0;
+  distinctRegistry = {};
   if (leaderPending) { clearTimeout(leaderPending.timer); leaderPending = null; }
-  renderEvents();
-  $("rows").innerHTML = ""; $("standHead").innerHTML = ""; $("legend").innerHTML = "";
+  $("rows").innerHTML = ""; $("standHead").innerHTML = "";
   $("leadValue").textContent = "—"; $("pair").textContent = "";
-  $("leadFill").style.width = "0"; $("leadPanel").classList.remove("near");
+  $("leadFill").style.width = "0"; $("thresholdTick").classList.remove("a51-alert-indicator");
   const oc = $("overlay").getContext("2d"); oc.clearRect(0, 0, $("overlay").width, $("overlay").height);
+  setCaption("Battle progress"); $("progressTurns").textContent = ""; $("progressFill").style.width = "0";
 }
 
 const focusSlot = (S = B) => (S && focusTeam ? S.teams.findIndex((t) => t.team === focusTeam) : -1);
+const raceIdOf = (t) => runIds[t.team - 1] || t.name;
+
+// Display colours: each race's own colour, or with Distinct colours a
+// palette colour kept per race ID (at most ten; the rest keep their own).
+function displayColors(S) {
+  const defined = S.teams.map((t) => t.color & 0xffffff);
+  if (prefs.colorMode !== "distinct") return defined;
+  const ids = S.teams.map(raceIdOf).sort().slice(0, AP.palette.length);
+  const previous = {}, used = new Set();
+  for (const id of ids) {
+    const c = distinctRegistry[id];
+    if (c && !used.has(c)) { previous[id] = c; used.add(c); }
+  }
+  const reg = AP.createColorRegistry(ids.map((raceId) => ({ raceId })), previous);
+  Object.assign(distinctRegistry, reg);
+  return S.teams.map((t, n) => (reg[raceIdOf(t)] ? parseInt(reg[raceIdOf(t)].slice(1), 16) : defined[n]));
+}
 
 function newBattleState(f) {
-  prevB = B;
   const W = f.map.width, H = f.map.height, N = W * H;
   const map = $("map");
   map.width = W; map.height = H;
@@ -469,18 +523,19 @@ function newBattleState(f) {
     id: f.battleId, seq: 0, battle: f.battle, W, H, map: f.map, params: f.params, teams: f.teams, turn: f.turn,
     team: new Uint8Array(N), ants: new Uint8Array(N), food: new Uint8Array(N), base: new Uint8Array(N),
     haveCells: false, bases: new Set(), history: f.teams.map(() => []), outcome: null, marks: [],
-    colors: f.teams.map((t, n) => (n < 10 ? SLOT_COLORS[n] : t.color & 0xffffff)),
-    ctx, img, px: new Uint32Array(img.data.buffer), pal: null,
+    colors: null, ctx, img, px: new Uint32Array(img.data.buffer), pal: null,
     mapDirty: true, overlayDirty: true, chartDirty: true, tablesDirty: true,
-    rows: [], fx: [], near: false, nearThr: 0, phaseKey: "", events: 0,
+    rows: [], fx: [], near: false, nearThr: 0, phaseKey: "", halfEmphasis: 0,
   };
+  B.colors = displayColors(B);
   if (focusSlot() < 0) focusTeam = 0;
   buildPalette();
   B.px.fill(PAL_EMPTY);
   buildRows();
-  renderLegend();
   renderFocusLabel();
-  resize();
+  $("baseValue").textContent = f.params.baseValue;
+  $("raceCount").textContent = `${f.teams.length} races`;
+  layoutView();
 }
 
 function applyBattleFrame(f) {
@@ -492,7 +547,6 @@ function applyBattleFrame(f) {
   if (f.seq <= B.seq) return;
   B.seq = f.seq;
   B.turn = f.turn; B.params = f.params; B.teams = f.teams;
-  B.numAnts = f.numAnts; B.numFood = f.numFood;
   if (f.outcome) B.outcome = f.outcome;
   const h = f.history;
   if (h) h.values.forEach((vals, n) => {
@@ -522,24 +576,20 @@ function buildPalette() {
     const r = (c >>> 16) & 255, g = (c >>> 8) & 255, b = c & 255;
     const k = fs >= 0 && n !== fs ? 0.38 : 1;
     const mix = (f, m = 1) => word(Math.round((r + (255 - r) * f) * k * m), Math.round((g + (255 - g) * f) * k * m), Math.round((b + (255 - b) * f) * k * m));
-    B.pal.push({ full: mix(0), food: mix(0.32), base: mix(0.55), terr: mix(0, 0.14), dim: k < 1 });
+    B.pal.push({ full: mix(0), base: mix(0.55), terr: mix(0, 0.14), dim: k < 1 });
   });
 }
 
-// Pixel priority (IMPLEMENTATION.md §4).
+// Cells: occupied base (contrasting tint), empty base (ivory), ants (the
+// race's display colour), food (grey), territory (faint tint), empty.
 function colorAt(i) {
   const t = B.team[i], a = B.ants[i], f = B.food[i], P = B.pal[t];
   if (B.base[i]) return a && P ? P.base : P && P.dim ? PAL_IVORY_DIM : PAL_IVORY;
-  if (a && P) {
-    if (f) return P.food;
-    if (optAnts) return P.full;
-  }
+  if (a && P && (f || prefs.antsLayer)) return P.full;
   if (f) return PAL_FOOD[f];
-  if (P && optTerritory) return P.terr;
+  if (P && prefs.territory) return P.terr;
   return PAL_EMPTY;
 }
-
-let optAnts = true, optTerritory = true, optMarkers = true;
 
 function repaintAll() {
   if (!B) return;
@@ -570,23 +620,42 @@ function applyCells(c) {
   if (idx.length) B.mapDirty = true;
 }
 
-// Integer cell scale: 2× only when both 2W and 2H fit next to the analysis.
-function resize() {
-  if (!B) return;
-  const fit2 = 2 * B.W + 660 + 100 <= innerWidth && 2 * B.H + 260 <= innerHeight;
-  scale = fit2 ? 2 : 1;
-  document.querySelector(".shell").style.setProperty("--map-size", `${B.W * scale}px`);
-  document.body.dataset.large = String(scale === 2);
+// The selected whole-number scale is kept whatever the window size; the
+// analysis goes to the right when it fits, otherwise below a centred map.
+let lastLayoutWidth = -1;
+function layoutView() {
+  const ws = $("liveView"), w = ws.clientWidth;
+  if (!B || !w) return;
+  lastLayoutWidth = w;
+  scale = prefs.scale;
+  const L = AP.layout(w, B.W, B.H, scale);
+  ws.classList.toggle("stacked", L.stacked);
+  ws.classList.toggle("split", L.stacked && w >= 2 * 310 + 32);
+  ws.style.setProperty("--map-size", `${L.mapWidth}px`);
   const map = $("map"), ov = $("overlay"), dpr = devicePixelRatio || 1;
-  map.style.width = `${B.W * scale}px`; map.style.height = `${B.H * scale}px`;
+  map.style.width = `${L.mapWidth}px`; map.style.height = `${L.mapHeight}px`;
   ov.style.width = map.style.width; ov.style.height = map.style.height;
-  ov.width = Math.round(B.W * scale * dpr); ov.height = Math.round(B.H * scale * dpr);
-  $("mapInfo").textContent = `${B.W} × ${B.H} · ${scale}× SCALE`;
-  $("sizeNotice").textContent = innerWidth < 558 ? "DESKTOP LAYOUT · THE MAP IS NEVER SHRUNK, SCROLL SIDEWAYS" : "";
+  ov.width = Math.round(L.mapWidth * dpr); ov.height = Math.round(L.mapHeight * dpr);
+  $("mapWrap").hidden = !L.mapFits;
+  $("mapNotice").hidden = L.mapFits;
+  if (!L.mapFits) {
+    const oneFits = B.W <= w;
+    $("mapNoticeText").textContent = `${scale}× needs ${fmt(L.mapWidth)} pixels of width. ` +
+      (scale === 2 && oneFits ? "Choose 1× or open a wider view." : "Open a wider view to see every cell.");
+    $("useOne").hidden = !(scale === 2 && oneFits);
+  }
+  $("mapInfo").textContent = `${B.W} × ${B.H} · ${scale}×`;
+  $("layoutLabel").textContent = L.stacked ? "Analysis below · map centred" : "Analysis beside the map";
+  const aw = $("standings").clientWidth;
+  $("standings").classList.toggle("no-share", aw > 0 && aw < 440);
   B.overlayDirty = B.chartDirty = true;
   scheduleRender();
 }
-addEventListener("resize", () => { if (B) resize(); });
+new ResizeObserver(() => {
+  const w = $("liveView").clientWidth;
+  if (w !== lastLayoutWidth) requestAnimationFrame(layoutView);
+}).observe($("liveView"));
+$("useOne").onclick = () => setScale(1);
 
 // Base corner markers and the short event outlines, on a transparent canvas
 // clipped to the battlefield.
@@ -595,7 +664,7 @@ function drawOverlay(now) {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, ov.width, ov.height);
   const s = scale, fs = focusSlot();
-  if (optMarkers) {
+  if (prefs.baseMarkers) {
     for (const i of B.bases) {
       const x = (i % B.W) * s, y = Math.floor(i / B.W) * s, t = B.team[i];
       ctx.globalAlpha = fs >= 0 && t && t - 1 !== fs ? 0.38 : 1;
@@ -615,14 +684,8 @@ function drawOverlay(now) {
     let size;
     if (e.still) { size = 10; ctx.globalAlpha = 1; }
     else { size = e.kind === "base-created" ? 6 + 18 * p : 16 - 10 * p; ctx.globalAlpha = 1 - p; }
-    ctx.strokeStyle = e.color;
+    ctx.strokeStyle = e.kind === "base-lost" ? css("--a51-loss") : e.color;
     ctx.strokeRect(Math.round(cx - size / 2) + 0.5, Math.round(cy - size / 2) + 0.5, Math.round(size) - 1, Math.round(size) - 1);
-    if (e.kind === "base-lost" && !e.still) {
-      ctx.beginPath();
-      ctx.moveTo(cx - 2, cy - 2); ctx.lineTo(cx + 2, cy + 2);
-      ctx.moveTo(cx + 2, cy - 2); ctx.lineTo(cx - 2, cy + 2);
-      ctx.stroke();
-    }
   }
   ctx.globalAlpha = 1;
   B.overlayDirty = B.fx.length > 0;
@@ -630,9 +693,9 @@ function drawOverlay(now) {
 
 function addEffect(e, S) {
   if (S !== B || !showing || document.hidden || view !== "run") return;
-  const color = e.kind === "base-lost" ? DANGER : hexOf(S.colors[e.slot] || 0xefe9dc);
   const still = !motionOn();
-  B.fx.push({ kind: e.kind, x: e.x, y: e.y, color, t0: performance.now(), dur: still ? 650 : e.kind === "base-created" ? 650 : 480, still });
+  B.fx.push({ kind: e.kind, x: e.x, y: e.y, color: hexOf(S.colors[e.slot] || 0xefe9dc), t0: performance.now(),
+    dur: still || e.kind === "base-created" ? 650 : 480, still });
   if (B.fx.length > 8) B.fx.splice(0, B.fx.length - 8);    // at most eight at a time, newest kept
   B.overlayDirty = true;
 }
@@ -644,17 +707,55 @@ $("mapWrap").addEventListener("mousemove", (e) => {
   const x = Math.floor((e.clientX - r.left) / scale), y = Math.floor((e.clientY - r.top) / scale);
   if (x < 0 || y < 0 || x >= B.W || y >= B.H) return;
   const i = x + y * B.W, t = B.team[i];
-  const who = t ? `${letterOf(t - 1)} ${B.teams[t - 1].name}` : "unowned";
-  $("probe").textContent = `(${x},${y}) · ${who} · ants ${B.ants[i]} · food ${B.food[i]}${B.base[i] ? " · BASE" : ""}`;
+  const who = t ? B.teams[t - 1].name : "unowned";
+  $("probe").textContent = `(${x},${y}) · ${who} · ants ${B.ants[i]} · food ${B.food[i]}${B.base[i] ? " · base" : ""}`;
 });
-$("mapWrap").addEventListener("mouseleave", () => { $("probe").textContent = "Hover a cell to inspect counts · click a race row to focus it"; });
+$("mapWrap").addEventListener("mouseleave", () => { $("probe").textContent = "No zoom · Full battlefield"; });
 
-$("optTerritory").onchange = () => { optTerritory = $("optTerritory").checked; repaintAll(); };
-$("optAnts").onchange = () => { optAnts = $("optAnts").checked; repaintAll(); };
-$("markers").onchange = () => { optMarkers = $("markers").checked; if (B) { B.overlayDirty = true; scheduleRender(); } };
-function applyMotion() { document.documentElement.dataset.motion = $("motion").checked ? "on" : "off"; }
-$("motion").onchange = applyMotion;
+// --- Display controls (never sent to the engine) ------------------------------------
+
+function setScale(s) {
+  prefs.scale = s; savePrefs();
+  document.querySelectorAll("[data-scale]").forEach((b) => b.setAttribute("aria-pressed", String(+b.dataset.scale === s)));
+  layoutView();
+}
+document.querySelectorAll("[data-scale]").forEach((b) => { b.onclick = () => setScale(+b.dataset.scale); });
+
+function setColorMode(mode) {
+  prefs.colorMode = mode; savePrefs();
+  $("distinctBtn").setAttribute("aria-pressed", String(mode === "distinct"));
+  $("paletteLabel").textContent = mode === "distinct" ? "Distinct display colours · definitions unchanged" : "Race-defined colours";
+  if (!B) return;
+  B.colors = displayColors(B);
+  buildPalette();
+  repaintAll();
+  B.rows.forEach((tr, n) => { tr.querySelector(".dot").style.background = hexOf(B.colors[n]); });
+  B.chartDirty = true;
+  scheduleRender();
+}
+$("distinctBtn").onclick = () => setColorMode(prefs.colorMode === "distinct" ? "defined" : "distinct");
+
+function setTheme(theme) {
+  prefs.theme = theme; savePrefs();
+  document.documentElement.dataset.theme = theme;
+  document.querySelectorAll("[data-theme-choice]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.themeChoice === theme)));
+  if (B) { B.chartDirty = B.overlayDirty = true; scheduleRender(); }
+}
+document.querySelectorAll("[data-theme-choice]").forEach((b) => { b.onclick = () => setTheme(b.dataset.themeChoice); });
+
+function bindToggle(id, key, after) {
+  $(id).checked = prefs[key];
+  $(id).onchange = () => { prefs[key] = $(id).checked; savePrefs(); after(); };
+}
+bindToggle("optTerritory", "territory", repaintAll);
+bindToggle("optAnts", "antsLayer", repaintAll);
+bindToggle("markers", "baseMarkers", () => { if (B) { B.overlayDirty = true; scheduleRender(); } });
+bindToggle("motion", "motion", applyMotion);
+function applyMotion() { document.documentElement.dataset.motion = prefs.motion ? "on" : "off"; }
 applyMotion();
+setTheme(prefs.theme === "champagne" ? "champagne" : "obsidian");
+setScale(prefs.scale);
+setColorMode(prefs.colorMode === "distinct" ? "distinct" : "defined");
 
 // --- Rendering ------------------------------------------------------------------------
 
@@ -670,17 +771,11 @@ function render() {
   const now = performance.now();
   if (B.mapDirty) { B.ctx.putImageData(B.img, 0, 0); B.mapDirty = false; }
   if (B.overlayDirty) drawOverlay(now);
-  renderHeader();
+  renderHeader(now);
   renderLead();
   if (B.tablesDirty && now - lastTables >= 250) { renderStandings(); lastTables = now; B.tablesDirty = false; }
   if (B.chartDirty && now - lastChart >= 120) { drawChart(); lastChart = now; B.chartDirty = false; }
-  if (B.overlayDirty || B.tablesDirty || B.chartDirty) scheduleRender();
-}
-
-function setPhase(text, cls = "") {
-  const el = $("phase");
-  el.textContent = text;
-  el.className = `phase ${cls}`.trim();
+  if (B.overlayDirty || B.tablesDirty || B.chartDirty || B.halfEmphasis > now) scheduleRender();
 }
 
 // Effective threshold: after halftime the engine checks both conditions.
@@ -688,83 +783,85 @@ function threshold(S, turn = S.turn) {
   const P = S.params;
   return turn >= P.halfTimeTurn ? Math.min(P.winPercent, P.halfTimePercent) : P.winPercent;
 }
+const turnsLeft = (to, t) => fmt(Math.max(0, to - t));
 
-function renderHeader() {
-  const P = B.params, t = B.turn;
-  $("turnLabel").textContent = `TURN ${fmt(t)}`;
-  $("battleLabel").textContent = `BATTLE ${B.battle} / ${fmt(numBattles)}`;
-  $("raceCount").textContent = `${B.teams.length} RACES`;
+// Battle progress in the header: turns, halftime and fulltime; warnings and
+// the engine's result replace the caption.
+function renderHeader(now) {
+  const P = B.params, t = B.turn, TO = Math.max(1, P.timeOutTurn);
+  $("battleLabel").textContent = `Battle ${B.battle} / ${fmt(numBattles)}`;
+  $("progressTurns").textContent = `${fmt(t)} / ${fmt(P.timeOutTurn)} turns`;
+  $("progressFill").style.width = `${Math.min(100, 100 * t / TO)}%`;
+  $("progressTrack").setAttribute("aria-valuemax", String(TO));
+  $("progressTrack").setAttribute("aria-valuenow", String(t));
+  const hasHalf = P.halfTimeTurn < P.timeOutTurn;
+  $("halfMark").hidden = !hasHalf;
+  const halfPct = 100 * P.halfTimeTurn / TO;
+  $("halfMark").style.left = `${halfPct}%`;
+  // Keep the halftime label clear of the 0 and fulltime labels.
+  $("halfTick").style.left = `${Math.min(88, Math.max(12, halfPct))}%`;
+  $("halfTick").textContent = hasHalf ? `Halftime ${fmt(P.halfTimeTurn)}` : "";
+  $("endTick").textContent = fmt(P.timeOutTurn);
   const warnH = Math.min(200, Math.max(1, Math.floor(P.halfTimeTurn * 0.02)));
   const warnF = Math.min(400, Math.max(1, Math.floor(P.timeOutTurn * 0.02)));
-  let key, text, cls = "";
+  let key, text, half = "", end = "";
   if (B.outcome) {
     const o = B.outcome, w = o.winner >= 0 && B.teams[o.winner];
     key = "ended";
-    text = `BATTLE ENDED · ${REASONS[o.reason] || o.reason}${w && "WHT".includes(o.reason) ? ` · ${letterOf(o.winner)} ${w.name.toUpperCase()}` : ""}`;
-    cls = "ended";
-  } else if (t < P.halfTimeTurn && P.halfTimeTurn < P.timeOutTurn) {
-    const rem = P.halfTimeTurn - t;
-    if (rem <= warnH) { key = "warnH"; text = `HALFTIME IN ${fmt(rem)} TURNS`; cls = "near"; }
-    else { key = "pre"; text = `PRE-HALFTIME · ${P.winPercent}% TO WIN`; }
+    text = `Battle ended · ${REASONS[o.reason] || o.reason}${w && "WHT".includes(o.reason) ? ` · ${w.name} wins` : ""}`;
+  } else if (P.timeOutTurn - t <= warnF) {
+    key = "warnF"; text = `Fulltime in ${turnsLeft(P.timeOutTurn, t)} turns`; end = "a51-alert-indicator";
+  } else if (hasHalf && t < P.halfTimeTurn && P.halfTimeTurn - t <= warnH) {
+    key = "warnH"; text = `Halftime in ${turnsLeft(P.halfTimeTurn, t)} turns`; half = "a51-alert-indicator";
+  } else if (hasHalf && t >= P.halfTimeTurn) {
+    key = "post"; text = `Battle progress · after halftime ${threshold(B)}% to win`; half = "reached";
   } else {
-    const rem = P.timeOutTurn - t;
-    if (rem <= warnF) { key = "warnF"; text = `FULLTIME IN ${fmt(rem)} TURNS`; cls = "near"; }
-    else { key = t >= P.halfTimeTurn ? "post" : "pre"; text = `${t >= P.halfTimeTurn ? "POST-HALFTIME" : "PRE-HALFTIME"} · ${threshold(B)}% TO WIN`; }
+    key = "pre"; text = "Battle progress";
   }
+  if (B.halfEmphasis > now) half = "emphasis";
   if (B.phaseKey !== key) {
     if (key === "warnH") announce(`Halftime in ${turnsLeft(P.halfTimeTurn, t)} turns`);
     if (key === "warnF") announce(`Fulltime in ${turnsLeft(P.timeOutTurn, t)} turns`);
     B.phaseKey = key;
   }
-  setPhase(text, cls);
-  // Timeline
-  const TO = Math.max(1, P.timeOutTurn);
-  const at = (v) => `${Math.min(100, 100 * v / TO)}%`;
-  $("progressFill").style.width = at(t);
-  $("playhead").style.left = at(t);
-  const showHalf = P.halfTimeTurn < P.timeOutTurn;
-  $("halfMarker").style.display = $("halfLabel").style.display = showHalf ? "" : "none";
-  $("halfMarker").style.left = $("halfLabel").style.left = at(P.halfTimeTurn);
-  $("halfLabel").textContent = `HALFTIME ${fmt(P.halfTimeTurn)}`;
-  $("fullLabel").textContent = `FULLTIME ${fmt(P.timeOutTurn)}`;
-  $("remaining").textContent = B.outcome ? `ENDED AT TURN ${fmt(B.outcome.turn)}` : `${fmt(Math.max(0, P.timeOutTurn - t))} TURNS TO FULLTIME`;
+  setCaption(text, key === "ended");
+  $("halfMark").className = `half-mark ${half}`.trim();
+  $("endMark").className = `end-mark ${end}`.trim();
 }
-const turnsLeft = (to, t) => fmt(Math.max(0, to - t));
 
 const strength = (S, t) => t.ants + S.params.baseValue * t.bases;
 
-// Leader over runner-up: L / (L + R), with near-victory hysteresis.
+// Lead over runner-up: L / (L + R) of the two strongest, with near-victory
+// hysteresis on the threshold tick.
 function renderLead() {
   const vals = B.teams.map((t, n) => ({ n, v: strength(B, t) })).sort((a, b) => b.v - a.v || a.n - b.n);
   const thr = threshold(B);
   $("thresholdTick").style.left = `${thr}%`;
-  $("thresholdLabel").textContent = `${thr}% TO WIN`;
-  if (vals.length < 2 || vals[0].v + vals[1].v === 0) {
-    $("leadValue").textContent = "—"; $("pair").textContent = ""; $("leadFill").style.width = "0";
-    B.near = false; $("leadPanel").classList.remove("near");
+  $("thresholdLabel").textContent = `${thr}% to win`;
+  const ratio = AP.leadRatio(vals.map((x) => x.v));
+  if (ratio === null) {
+    $("leadValue").textContent = "—"; $("pair").textContent = vals.length > 1 ? "No strength yet" : ""; $("leadFill").style.width = "0";
+    B.near = false; $("thresholdTick").classList.remove("a51-alert-indicator");
     return;
   }
-  const L = vals[0], R = vals[1], ratio = 100 * L.v / (L.v + R.v);
-  const tie = L.v === R.v;
-  $("pair").textContent = tie ? `${letterOf(L.n)} = ${letterOf(R.n)} · JOINT LEADERS` : `${letterOf(L.n)} VS ${letterOf(R.n)}`;
+  const L = vals[0], R = vals[1];
+  const nameOf = (n) => B.teams[n].name;
+  $("pair").textContent = L.v === R.v ? `${nameOf(L.n)} = ${nameOf(R.n)} · joint leaders` : `${nameOf(L.n)} / ${nameOf(R.n)}`;
   $("leadValue").textContent = `${ratio.toFixed(1)}%`;
-  $("leadValue").title = `${B.teams[L.n].name} ${fmt(L.v)} ÷ (${fmt(L.v)} + ${B.teams[R.n].name} ${fmt(R.v)})`;
+  $("leadValue").title = `${nameOf(L.n)} ${fmt(L.v)} ÷ (${fmt(L.v)} + ${nameOf(R.n)} ${fmt(R.v)})`;
   $("leadFill").style.width = `${ratio}%`;
-  $("leadFill").style.background = hexOf(B.colors[L.n]);
   if (B.nearThr !== thr) { B.near = false; B.nearThr = thr; }
   if (B.outcome) B.near = false;
   else if (!B.near && ratio >= thr - 5 && ratio < thr) B.near = true;
   else if (B.near && ratio < thr - 7) B.near = false;
-  $("leadPanel").classList.toggle("near", B.near);
+  $("thresholdTick").classList.toggle("a51-alert-indicator", B.near);
 }
 
 // --- Standings --------------------------------------------------------------------------
 
 let moreStats = false;
-const COLS = [
-  ["#", ""], ["ID", ""], ["RACE", ""], ["STRENGTH", "num"], ["SHARE", "num"], ["ANTS", "num"], ["BASES", "num"],
-];
-const MORE_COLS = [["BORN", "num"], ["BUILT", "num"], ["KILLS", "num"], ["DEATHS", "num"], ["TERRITORY", "num"], ["NS/CALL", "num"]];
+const COLS = [["Ant race", ""], ["Strength", "number"], ["Share", "number share"], ["Ants", "number"], ["Bases", "number"]];
+const MORE_COLS = [["Born", "number"], ["Built", "number"], ["Kills", "number"], ["Deaths", "number"], ["Territory", "number"], ["ns/call", "number"]];
 
 function buildRows() {
   const cols = moreStats ? [...COLS, ...MORE_COLS] : COLS;
@@ -775,40 +872,38 @@ function buildRows() {
     const tr = document.createElement("tr");
     tr.tabIndex = 0;
     tr.dataset.slot = n;
-    const color = hexOf(B.colors[n]);
-    tr.innerHTML = `<td><span class="rank"></span></td><td><span class="id" style="color:${color}">${letterOf(n)}</span></td>` +
-      `<td class="race" title="${esc(t.name)}">${esc(t.name)}</td>` +
-      `<td class="num strength"><span class="v"></span><span class="track"><b style="background:${color}"></b></span></td>` +
-      `<td class="num share"></td><td class="num"></td><td class="num"></td>` +
-      (moreStats ? MORE_COLS.map(() => `<td class="num"></td>`).join("") : "");
-    tr.setAttribute("aria-label", `${letterOf(n)} ${t.name}`);
+    const id = `${letterOf(t.team - 1)} · ${raceIdOf(t)}`;
+    tr.innerHTML = `<td><span class="name-cell"><span class="rank"></span><span class="dot" style="background:${hexOf(B.colors[n])}"></span>` +
+      `<span class="name" title="${esc(`${t.name} (${id})`)}">${esc(t.name)}</span></span></td>` +
+      `<td class="number"></td><td class="number share"></td><td class="number"></td><td class="number"></td>` +
+      (moreStats ? MORE_COLS.map(() => `<td class="number"></td>`).join("") : "");
+    tr.setAttribute("aria-label", `${t.name}, ${id}`);
     tbody.appendChild(tr);
     return tr;
   });
   B.order = B.teams.map((_, n) => n);
   renderStandings();
+  layoutView();
 }
 
 function renderStandings() {
   if (!B || !B.rows.length) return;
   const vals = B.teams.map((t) => strength(B, t));
   const total = vals.reduce((a, b) => a + b, 0);
-  const max = Math.max(1, ...vals);
   const fs = focusSlot();
   const order = B.teams.map((_, n) => n).sort((a, b) => vals[b] - vals[a] || a - b);
   order.forEach((n, k) => {
     const t = B.teams[n], tr = B.rows[n], td = tr.children;
     const out = t.ants === 0 && t.bases === 0;
-    td[0].firstChild.textContent = out ? "" : String(k + 1).padStart(2, "0");
-    td[3].firstChild.textContent = out ? "OUT" : fmt(vals[n]);
-    td[3].lastChild.firstChild.style.width = `${100 * vals[n] / max}%`;
-    td[4].textContent = total ? `${(100 * vals[n] / total).toFixed(1)}%` : "—";
-    td[5].textContent = fmt(t.ants);
-    td[6].textContent = fmt(t.bases);
+    td[0].querySelector(".rank").textContent = out ? "" : String(k + 1);
+    td[1].textContent = out ? "Out" : fmt(vals[n]);
+    td[2].textContent = total ? `${(100 * vals[n] / total).toFixed(1)}%` : "—";
+    td[3].textContent = fmt(t.ants);
+    td[4].textContent = fmt(t.bases);
     if (moreStats) {
-      td[7].textContent = fmt(t.born); td[8].textContent = fmt(Math.max(0, t.built - 1));
-      td[9].textContent = fmt(t.kill); td[10].textContent = fmt(t.killed);
-      td[11].textContent = fmt(t.squares); td[12].textContent = t.nsPerCall ? fmt(t.nsPerCall) : "–";
+      td[5].textContent = fmt(t.born); td[6].textContent = fmt(Math.max(0, t.built - 1));
+      td[7].textContent = fmt(t.kill); td[8].textContent = fmt(t.killed);
+      td[9].textContent = fmt(t.squares); td[10].textContent = t.nsPerCall ? fmt(t.nsPerCall) : "–";
     }
     tr.classList.toggle("out", out);
     tr.classList.toggle("selected", n === fs);
@@ -816,7 +911,7 @@ function renderStandings() {
   });
   // Row order is frozen while the user is on the table.
   const tbody = $("rows");
-  if (!tbody.contains(document.activeElement) && order.some((n, k) => B.order[k] !== n)) {
+  if (!tbody.contains(document.activeElement) && !tbody.matches(":hover") && order.some((n, k) => B.order[k] !== n)) {
     for (const n of order) tbody.appendChild(B.rows[n]);
     B.order = order;
   }
@@ -830,7 +925,9 @@ $("rows").addEventListener("keydown", (e) => {
   if (e.key === "ArrowDown" && tr.nextElementSibling) { e.preventDefault(); tr.nextElementSibling.focus(); }
   if (e.key === "ArrowUp" && tr.previousElementSibling) { e.preventDefault(); tr.previousElementSibling.focus(); }
 });
-$("rows").addEventListener("focusout", () => setTimeout(() => { if (B) { B.tablesDirty = true; scheduleRender(); } }, 0));
+const refreshRows = () => setTimeout(() => { if (B) { B.tablesDirty = true; scheduleRender(); } }, 0);
+$("rows").addEventListener("focusout", refreshRows);
+$("rows").addEventListener("mouseleave", refreshRows);
 $("moreStats").onclick = () => {
   moreStats = !moreStats;
   $("moreStats").setAttribute("aria-pressed", String(moreStats));
@@ -838,12 +935,6 @@ $("moreStats").onclick = () => {
   if (B) buildRows();
 };
 $("clearFocus").onclick = () => setFocus(-1);
-
-function renderLegend() {
-  $("legend").innerHTML = B.teams.map((t, n) =>
-    `<button data-slot="${n}" style="color:${hexOf(B.colors[n])}" title="${esc(t.name)}" aria-label="Focus ${letterOf(n)} ${esc(t.name)}" aria-pressed="false">${letterOf(n)}</button>`).join("");
-}
-$("legend").onclick = (e) => { const b = e.target.closest("button"); if (b) setFocus(+b.dataset.slot); };
 
 function setFocus(slot) {
   if (!B) return;
@@ -858,19 +949,12 @@ function setFocus(slot) {
 }
 
 function renderFocusLabel() {
-  const fs = focusSlot();
-  $("focusLabel").textContent = fs >= 0 ? `FOCUS · ${letterOf(fs)} ${B.teams[fs].name.toUpperCase()}` : "ALL RACES";
-  $("clearFocus").disabled = fs < 0;
-  $("legend").querySelectorAll("button").forEach((b) => {
-    const on = +b.dataset.slot === fs;
-    b.classList.toggle("selected", on);
-    b.setAttribute("aria-pressed", String(on));
-  });
+  $("clearFocus").disabled = focusSlot() < 0;
 }
 
 // --- Strength chart ------------------------------------------------------------------------
 
-let chartHover = null;   // CSS x within the chart, or null
+let chartTurn = null;   // turn under the cursor (mouse or keyboard), or null
 
 function niceStep(max, count) {
   const raw = Math.max(max, 1) / count, mag = 10 ** Math.floor(Math.log10(raw)), norm = raw / mag;
@@ -879,13 +963,13 @@ function niceStep(max, count) {
 
 function chartGeometry() {
   const cv = $("chart"), w = cv.clientWidth, h = cv.clientHeight;
-  const g = { cv, w, h, l: 46, r: 12, t: 16, b: 20 };
+  const g = { cv, w, h, l: 46, r: 10, t: 24, b: 22 };
   g.pw = Math.max(10, w - g.l - g.r); g.ph = Math.max(10, h - g.t - g.b);
   g.n = B.history[0] ? B.history[0].length : 0;
   g.xMax = Math.max(g.n, 10);
   let maxV = 0;
   for (const a of B.history) for (let k = 0; k < a.length; k++) if (a[k] > maxV) maxV = a[k];
-  g.step = niceStep(maxV, 4);
+  g.step = niceStep(maxV, 3);
   g.yMax = Math.max(g.step, Math.ceil(maxV / g.step) * g.step);
   g.x = (turn) => g.l + turn / g.xMax * g.pw;
   g.y = (v) => g.t + g.ph - v / g.yMax * g.ph;
@@ -898,44 +982,49 @@ function drawChart() {
   if (cv.width !== Math.round(g.w * dpr) || cv.height !== Math.round(g.h * dpr)) {
     cv.width = Math.round(g.w * dpr); cv.height = Math.round(g.h * dpr);
   }
+  const line = css("--a51-line"), muted = css("--a51-muted"), accent = css("--a51-accent"), text = css("--a51-text");
   const ctx = cv.getContext("2d");
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, g.w, g.h);
-  ctx.font = `9px ${css("--font-mono")}`;
+  ctx.font = "11px Arial, Helvetica, sans-serif";
   ctx.lineWidth = 1;
+  ctx.fillStyle = muted; ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+  ctx.fillText("Strength", g.l, 11);
   // Grid and axes
   ctx.textBaseline = "middle"; ctx.textAlign = "right";
   for (let v = 0; v <= g.yMax; v += g.step) {
     const y = Math.round(g.y(v)) + 0.5;
-    ctx.strokeStyle = "#232427"; ctx.beginPath(); ctx.moveTo(g.l, y); ctx.lineTo(g.l + g.pw, y); ctx.stroke();
-    ctx.fillStyle = "#77746c"; ctx.fillText(fmt(v), g.l - 6, y);
+    ctx.strokeStyle = line; ctx.beginPath(); ctx.moveTo(g.l, y); ctx.lineTo(g.l + g.pw, y); ctx.stroke();
+    ctx.fillStyle = muted; ctx.fillText(fmt(v), g.l - 7, y);
   }
-  ctx.textAlign = "center"; ctx.textBaseline = "top";
-  const xs = niceStep(g.xMax, 5);
-  for (let t = 0; t <= g.xMax; t += xs) ctx.fillText(fmt(t), g.x(t), g.t + g.ph + 6);
+  ctx.textBaseline = "top";
+  const xs = niceStep(g.xMax, 4);
+  for (let t = 0; t <= g.xMax; t += xs) {
+    ctx.textAlign = t === 0 ? "left" : g.x(t) > g.l + g.pw - 30 ? "right" : "center";
+    ctx.fillText(fmt(t), g.x(t), g.t + g.ph + 7);
+  }
   // Halftime boundary at the real configured turn
   const HT = B.params.halfTimeTurn;
   if (HT <= g.xMax && HT < B.params.timeOutTurn) {
     const x = Math.round(g.x(HT)) + 0.5;
-    ctx.strokeStyle = AMBER; ctx.globalAlpha = 0.7; ctx.setLineDash([3, 3]);
+    ctx.strokeStyle = accent; ctx.setLineDash([3, 3]);
     ctx.beginPath(); ctx.moveTo(x, g.t); ctx.lineTo(x, g.t + g.ph); ctx.stroke();
-    ctx.setLineDash([]); ctx.globalAlpha = 1;
-    ctx.fillStyle = AMBER; ctx.textAlign = x > g.l + g.pw - 60 ? "right" : "left"; ctx.textBaseline = "top";
-    ctx.fillText("HALFTIME", x + (ctx.textAlign === "left" ? 4 : -4), g.t + 2);
+    ctx.setLineDash([]);
+    ctx.fillStyle = accent; ctx.textBaseline = "top";
+    ctx.textAlign = x > g.l + g.pw - 60 ? "right" : "left";
+    ctx.fillText("Halftime", x + (ctx.textAlign === "left" ? 4 : -4), g.t + 2);
   }
-  drawMarks(ctx, g);
+  drawMarks(ctx, g, muted, accent);
   // Series: min/max per pixel column, so sudden drops survive.
   const fs = focusSlot();
-  const latest = B.history.map((a) => a[a.length - 1] || 0);
-  const top3 = latest.map((v, n) => n).sort((a, b) => latest[b] - latest[a] || a - b).slice(0, 3);
   const order = B.history.map((_, n) => n).filter((n) => n !== fs);
   if (fs >= 0) order.push(fs);
   for (const n of order) {
     const a = B.history[n];
     if (!a.length) continue;
     ctx.strokeStyle = hexOf(B.colors[n]);
-    ctx.lineWidth = n === fs ? 2 : 1.35;
-    ctx.globalAlpha = fs >= 0 ? (n === fs ? 1 : 0.24) : top3.includes(n) ? 1 : 0.72;
+    ctx.lineWidth = n === fs ? 2 : 1.5;
+    ctx.globalAlpha = fs >= 0 && n !== fs ? 0.24 : 1;
     ctx.beginPath();
     if (a.length <= g.pw) {
       for (let k = 0; k < a.length; k++) { const x = g.x(k + 1), y = g.y(a[k]); if (k) ctx.lineTo(x, y); else ctx.moveTo(x, y); }
@@ -956,158 +1045,129 @@ function drawChart() {
     ctx.stroke();
   }
   ctx.globalAlpha = 1;
-  // Shared cursor and readout
-  if (chartHover !== null && g.n) {
-    const turn = Math.max(1, Math.min(g.n, Math.round((chartHover - g.l) / g.pw * g.xMax)));
-    const x = Math.round(g.x(turn)) + 0.5;
-    ctx.strokeStyle = "#8d8a82"; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(x, g.t); ctx.lineTo(x, g.t + g.ph); ctx.stroke();
-    const vals = B.history.map((a, n) => ({ n, v: a[turn - 1] })).sort((p, q) => (q.n === fs) - (p.n === fs) || q.v - p.v || p.n - q.n);
-    const near = B.marks.filter((m) => Math.abs(g.x(m.turn) - x) <= 4).slice(-3)
-      .map((m) => `${m.label} T${fmt(m.turn)}`);
-    $("chartReadout").textContent = `TURN ${fmt(turn)} · ` + vals.map((p) => `${letterOf(p.n)} ${fmt(p.v)}`).join("  ") +
-      (near.length ? ` · ${near.join(", ")}` : "");
-  }
+  ctx.fillStyle = muted; ctx.textAlign = "right"; ctx.textBaseline = "alphabetic";
+  // Shared crosshair and tooltip
+  const tip = $("chartTip");
+  if (chartTurn === null || !g.n) { tip.hidden = true; return; }
+  const turn = Math.max(1, Math.min(g.n, chartTurn));
+  const x = Math.round(g.x(turn)) + 0.5;
+  ctx.strokeStyle = text; ctx.globalAlpha = 0.5; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(x, g.t); ctx.lineTo(x, g.t + g.ph); ctx.stroke();
+  ctx.globalAlpha = 1;
+  const vals = B.history.map((a, n) => ({ n, v: a[turn - 1] })).sort((p, q) => q.v - p.v || p.n - q.n);
+  const near = B.marks.filter((m) => Math.abs(g.x(m.turn) - x) <= 4);
+  tip.innerHTML = `<div>Turn ${fmt(turn)}</div>` + vals.map((p) =>
+    `<div><span class="dot" style="background:${hexOf(B.colors[p.n])}"></span>${esc(B.teams[p.n].name)}<span class="v">${fmt(p.v)}</span></div>`).join("") +
+    near.slice(-4).map((m) => `<div class="ev">Turn ${fmt(m.turn)} · ${esc(m.label)}</div>`).join("") +
+    (near.length > 4 ? `<div class="ev">${near.length - 4} more events</div>` : "");
+  tip.hidden = false;
+  const tw = tip.offsetWidth;
+  tip.style.left = `${x + 12 + tw > g.w ? Math.max(0, x - 12 - tw) : x + 12}px`;
+  $("chart").setAttribute("aria-valuetext", `Turn ${turn}: ` + vals.map((p) => `${B.teams[p.n].name} ${p.v}`).join(", "));
 }
 
-// Base and leader events as tiny marks at the top, grouped when close.
-function drawMarks(ctx, g) {
+// Base and leader events as small marks above the plot, grouped when close.
+function drawMarks(ctx, g, muted, accent) {
   const groups = [];
   for (const m of B.marks) {
     const x = g.x(m.turn), last = groups[groups.length - 1];
-    if (last && x - last.x < 6) { last.count++; last.m = m; } else groups.push({ x, count: 1, m });
+    if (last && x - last.x < 7) { last.count++; last.m = m; } else groups.push({ x, count: 1, m });
   }
-  const y = g.t - 9;
-  ctx.textAlign = "left"; ctx.textBaseline = "middle";
+  const y = g.t - 7;
+  ctx.textAlign = "left"; ctx.textBaseline = "middle"; ctx.lineWidth = 1;
   for (const gr of groups) {
     const x = Math.round(gr.x) + 0.5, m = gr.m;
-    ctx.globalAlpha = 0.12; ctx.strokeStyle = "#efe9dc";
-    ctx.beginPath(); ctx.moveTo(x, g.t); ctx.lineTo(x, g.t + g.ph); ctx.stroke();
-    ctx.globalAlpha = 1;
+    if (gr.count > 1) { ctx.fillStyle = muted; ctx.textAlign = "center"; ctx.fillText(String(gr.count), x, y); continue; }
     if (m.kind === "base-lost") {
-      ctx.strokeStyle = DANGER; ctx.beginPath();
-      ctx.moveTo(x - 2, y - 2); ctx.lineTo(x + 2, y + 2); ctx.moveTo(x + 2, y - 2); ctx.lineTo(x - 2, y + 2); ctx.stroke();
+      ctx.strokeStyle = css("--a51-loss"); ctx.beginPath();
+      ctx.moveTo(x - 2.5, y - 2.5); ctx.lineTo(x + 2.5, y + 2.5); ctx.moveTo(x + 2.5, y - 2.5); ctx.lineTo(x - 2.5, y + 2.5); ctx.stroke();
     } else if (m.kind === "leader-changed") {
-      ctx.strokeStyle = AMBER; ctx.beginPath(); ctx.moveTo(x - 3, y + 2); ctx.lineTo(x, y - 2); ctx.lineTo(x + 3, y + 2); ctx.stroke();
+      ctx.strokeStyle = accent; ctx.beginPath(); ctx.moveTo(x - 3, y + 2); ctx.lineTo(x, y - 2); ctx.lineTo(x + 3, y + 2); ctx.stroke();
     } else {
-      ctx.strokeStyle = hexOf(B.colors[m.slot] || 0xefe9dc); ctx.strokeRect(x - 2, y - 2, 4, 4);
+      ctx.strokeStyle = hexOf(B.colors[m.slot] || 0xefe9dc); ctx.strokeRect(x - 2.5, y - 2.5, 5, 5);
     }
-    if (gr.count > 1) { ctx.fillStyle = "#a9a69e"; ctx.fillText(String(gr.count), x + 4, y); }
   }
 }
 
+function chartTurnAt(clientX) {
+  const g = chartGeometry();
+  return Math.round((clientX - $("chart").getBoundingClientRect().left - g.l) / g.pw * g.xMax);
+}
 $("chart").addEventListener("mousemove", (e) => {
-  chartHover = e.clientX - $("chart").getBoundingClientRect().left;
-  if (B) { B.chartDirty = true; scheduleRender(); }
+  if (!B) return;
+  chartTurn = chartTurnAt(e.clientX);
+  B.chartDirty = true; scheduleRender();
 });
 $("chart").addEventListener("mouseleave", () => {
-  chartHover = null;
-  $("chartReadout").textContent = "Hover chart for turn and strength · letters stay with their races";
+  if (document.activeElement === $("chart")) return;
+  chartTurn = null;
   if (B) { B.chartDirty = true; scheduleRender(); }
 });
+$("chart").addEventListener("blur", () => { chartTurn = null; if (B) { B.chartDirty = true; scheduleRender(); } });
+$("chart").addEventListener("keydown", (e) => {
+  if (!B || !B.history[0]) return;
+  const n = B.history[0].length;
+  const cur = chartTurn === null ? n : chartTurn;
+  const step = e.shiftKey ? 100 : Math.max(1, Math.round(n / 100));
+  const next = { ArrowLeft: cur - step, ArrowRight: cur + step, Home: 1, End: n }[e.key];
+  if (next === undefined) return;
+  e.preventDefault();
+  chartTurn = Math.max(1, Math.min(n, next));
+  B.chartDirty = true; scheduleRender();
+});
 
-// --- Events ----------------------------------------------------------------------------
+// --- Events: map effects, chart marks, row emphasis, announcements ----------------------
 
-let log = [];              // newest first, at most 200 presentation entries
-let totalEvents = 0, hiddenEvents = 0;
 let leaderPending = null;
 
 function onEvent(e, S) {
   const seq = Number(String(e.id).split(":")[1]);
   if (e.battleId < lastEvent.b || (e.battleId === lastEvent.b && seq <= lastEvent.s)) return;   // duplicate
   lastEvent = { b: e.battleId, s: seq };
-  totalEvents++;
-  S.events++;
-  if (document.hidden) hiddenEvents++;
-  const who = e.slot >= 0 && S.teams[e.slot] ? { letter: letterOf(e.slot), name: S.teams[e.slot].name, color: hexOf(S.colors[e.slot]) } : null;
-  const where = e.x !== undefined ? `(${e.x},${e.y})` : "";
+  const name = e.slot >= 0 && S.teams[e.slot] ? S.teams[e.slot].name : "?";
   switch (e.kind) {
     case "base-created":
     case "base-lost": {
       const lost = e.kind === "base-lost";
-      S.marks.push({ turn: e.turn, kind: e.kind, slot: e.slot, label: `${who ? who.letter : "?"} base ${lost ? "lost" : "created"}` });
+      const by = lost && e.by >= 0 && S.teams[e.by] ? ` by ${S.teams[e.by].name}` : "";
+      S.marks.push({ turn: e.turn, kind: e.kind, slot: e.slot, label: `${name} base ${lost ? "destroyed" : "created"} (${e.x},${e.y})${by}` });
       addEffect(e, S);
-      const by = lost && e.by >= 0 && S.teams[e.by] ? ` by ${letterOf(e.by)} ${S.teams[e.by].name}` : "";
-      const now = performance.now(), top = log[0];
-      if (top && top.kind === e.kind && top.slot === e.slot && top.battleId === e.battleId && now - top.t < 250) {
-        top.count++; top.where.push(where + by);
-        top.text = `${top.count} bases ${lost ? "lost" : "created"}`;
-        renderEvents(true);
-      } else {
-        addLog({ kind: e.kind, slot: e.slot, battleId: e.battleId, battle: S.battle, turn: e.turn, who, count: 1,
-          where: [where + by], text: lost ? "Base lost" : "Base created", cls: lost ? "lost" : "", icon: lost ? "base-lost" : "base-created" });
-      }
-      if (lost && who) announceSoon(`${who.letter} ${who.name} lost a base`);
+      if (lost) announceSoon(`${name} lost a base`);
       break;
     }
     case "leader-changed":
-      S.marks.push({ turn: e.turn, kind: e.kind, slot: e.slot, label: `${who ? who.letter : "?"} leads` });
+      S.marks.push({ turn: e.turn, kind: e.kind, slot: e.slot, label: `${name} takes the lead` });
       if (!leaderPending) leaderPending = { count: 0, timer: setTimeout(flushLeader, 500) };
-      leaderPending.count++; leaderPending.e = e; leaderPending.S = S; leaderPending.who = who;
+      leaderPending.count++; leaderPending.e = e; leaderPending.S = S; leaderPending.name = name;
       break;
     case "halftime":
-      addLog({ kind: e.kind, battleId: e.battleId, battle: S.battle, turn: e.turn, count: 1, where: [],
-        text: `Halftime · ${threshold(S, e.turn)}% to win`, cls: "milestone", icon: "halftime" });
+      S.halfEmphasis = performance.now() + 1200;
       announce(`Halftime. ${threshold(S, e.turn)} percent to win.`);
       break;
     case "battle-ended": {
       S.outcome = S.outcome && S.outcome.reason !== "?" ? S.outcome : { reason: e.reason, winner: e.slot, turn: e.turn };
       const reason = REASONS[e.reason] || e.reason;
-      const won = who && "WHT".includes(e.reason);
-      addLog({ kind: e.kind, slot: won ? e.slot : -1, battleId: e.battleId, battle: S.battle, turn: e.turn, who: won ? who : null,
-        count: 1, where: [], text: `Battle ${S.battle} ended · ${reason}`, cls: "milestone", icon: "fulltime" });
-      announce(`Battle ${S.battle} ended, ${reason.toLowerCase()}${won ? `, ${who.name} wins` : ""}.`);
-      if (S === B) { B.tablesDirty = true; scheduleRender(); }
+      const won = e.slot >= 0 && "WHT".includes(e.reason);
+      announce(`Battle ${S.battle} ended, ${reason.toLowerCase()}${won ? `, ${name} wins` : ""}.`);
       break;
     }
   }
+  if (S === B) { B.chartDirty = B.tablesDirty = true; scheduleRender(); }
 }
 
-// Leader changes are shown 500 ms after the first one, summarised.
+// Lead changes are shown 500 ms after the first one, summarised.
 function flushLeader() {
   const p = leaderPending;
   leaderPending = null;
   if (!p) return;
-  const { e, S, who } = p;
-  addLog({ kind: "leader-changed", slot: e.slot, battleId: e.battleId, battle: S.battle, turn: e.turn, who, count: p.count, where: [],
-    text: p.count > 1 ? `${p.count} lead changes` : "Takes the lead", cls: "milestone", icon: "leader" });
-  if (who) announce(`${who.name} takes the lead`);
-  if (S === B && B.rows[e.slot]) {
+  const { e, S, name } = p;
+  announce(p.count > 1 ? `${p.count} lead changes; ${name} leads` : `${name} takes the lead`);
+  if (S === B && B.rows[e.slot] && motionOn()) {
     const tr = B.rows[e.slot];
     tr.classList.remove("leader-flash"); void tr.offsetWidth; tr.classList.add("leader-flash");
     setTimeout(() => tr.classList.remove("leader-flash"), 1300);
   }
 }
-
-function addLog(entry) {
-  entry.t = performance.now();
-  log.unshift(entry);
-  if (log.length > 200) log.length = 200;
-  renderEvents(false);
-}
-
-function eventRow(en, fresh) {
-  const who = en.who ? `<span class="who" style="color:${en.who.color}" title="${esc(en.who.name)}">${en.who.letter} ${esc(en.who.name)}</span>` : "";
-  const style = en.who && !en.cls ? ` style="color:${en.who.color}"` : "";
-  const details = `Battle ${en.battle}, turn ${en.turn}${en.where.length ? ": " + en.where.slice(0, 12).join(", ") + (en.where.length > 12 ? " …" : "") : ""}`;
-  return `<div class="event ${en.cls || ""}${fresh ? " event-new" : ""}" title="${esc(details)}"><time>T${fmt(en.turn)}</time>` +
-    `<span${style}>${icon(en.icon)}</span><span>${esc(en.text)}</span>${who}</div>`;
-}
-
-function renderEvents(update) {
-  $("events").innerHTML = log.slice(0, 2).map((en, k) => eventRow(en, k === 0 && !update)).join("") ||
-    `<div class="event muted">No events yet</div>`;
-  $("eventCount").textContent = totalEvents ? `(${fmt(totalEvents)})` : "";
-  if (!$("historyDrawer").classList.contains("hidden")) renderHistory();
-}
-
-function renderHistory() {
-  $("historyList").innerHTML = log.map((en) => eventRow(en, false).replace("</div>",
-    `</div>${en.where.length ? `<div class="event where">${esc(en.where.slice(0, 20).join(" "))}${en.where.length > 20 ? " …" : ""}</div>` : ""}`)).join("") ||
-    `<div class="event muted">No events yet</div>`;
-}
-$("historyBtn").onclick = () => { renderHistory(); $("historyDrawer").classList.remove("hidden"); $("closeHistory").focus(); };
-$("closeHistory").onclick = () => { $("historyDrawer").classList.add("hidden"); $("historyBtn").focus(); };
 
 // Polite announcements, grouped, at most once per second.
 let annQueue = [], annTimer = 0, annLast = 0;
@@ -1126,16 +1186,9 @@ function announceSoon(msg) {   // base losses: one summary per second
   if (!soonTimer) soonTimer = setTimeout(() => { announce(soonCount > 1 ? `${soonCount} bases lost` : soonMsg); soonCount = 0; soonTimer = 0; }, 1000);
 }
 
-// A hidden tab skips effects; on return a summary replaces the backlog.
+// A hidden tab plays no effects; on return it shows the current state.
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden) { hiddenEvents = 0; return; }
-  if (hiddenEvents && B) {
-    addLog({ kind: "summary", battleId: B.id, battle: B.battle, turn: B.turn, count: hiddenEvents, where: [],
-      text: `${hiddenEvents} events while hidden`, cls: "milestone", icon: "history" });
-    announce(`${hiddenEvents} events while the tab was hidden`);
-  }
-  hiddenEvents = 0;
-  if (running && !paused && !inflight) pump();
+  if (!document.hidden && running && !paused && !inflight) pump();
 });
 
 // --- Keys -------------------------------------------------------------------------------
@@ -1143,11 +1196,18 @@ document.addEventListener("visibilitychange", () => {
 function sendCmd(code) { if (running && !par) worker.postMessage({ type: "cmd", code }); }
 document.querySelectorAll("[data-cmd]").forEach((b) => { b.onclick = () => sendCmd(+b.dataset.cmd); });
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && !$("historyDrawer").classList.contains("hidden")) { $("closeHistory").click(); return; }
-  if ((e.target.tagName === "INPUT" && e.target.type === "text") || e.target.tagName === "TEXTAREA") return;
+  if (e.key === "Escape" && $("viewMenu").open) {
+    $("viewMenu").open = false; $("viewMenu").querySelector("summary").focus(); e.preventDefault(); return;
+  }
+  const t = e.target;
+  if (["INPUT", "TEXTAREA", "SELECT"].includes(t.tagName) || t.isContentEditable) return;
   const k = { F1: 1, F2: 2, F3: 3, F4: 4, F5: 5, Escape: 3 }[e.key];
-  if (k && running) { e.preventDefault(); sendCmd(k); }
+  if (!k || !running || par) return;
+  if (e.key === "Escape" && view !== "run") return;
+  e.preventDefault();
+  sendCmd(k);
 });
+document.addEventListener("click", (e) => { if ($("viewMenu").open && !$("viewMenu").contains(e.target)) $("viewMenu").open = false; });
 
 // --- JavaScript ants: list and editor ----------------------------------------------
 
@@ -1311,8 +1371,8 @@ function renderProgress(done, total, how) {
   const rate = done / Math.max(secs, 0.001);
   const eta = rate > 0 && done < total ? (total - done) / rate : 0;
   const t = (s) => (s >= 3600 ? `${Math.floor(s / 3600)}h ${Math.floor(s % 3600 / 60)}m` : s >= 60 ? `${Math.floor(s / 60)}m ${Math.floor(s % 60)}s` : `${Math.floor(s)}s`);
-  $("progress").textContent = `${done} / ${total} BATTLES · ${t(secs)} ELAPSED` +
-    (eta ? ` · ABOUT ${t(eta)} LEFT` : "") + (turnsSeen && !par ? ` · ${fmt(Math.round(turnsSeen / secs))} TURNS/S` : "") + ` · ${how.toUpperCase()}`;
+  $("progress").textContent = `${done} / ${total} battles · ${t(secs)} elapsed` +
+    (eta ? ` · about ${t(eta)} left` : "") + (turnsSeen && !par ? ` · ${fmt(Math.round(turnsSeen / secs))} turns/s` : "") + ` · ${how}`;
 }
 
 // Tournament standings so far, by win rate.

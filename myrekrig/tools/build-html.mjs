@@ -1,9 +1,9 @@
-// Builds the single-file browser app Ants51: dist/ants51.html.
+// Builds the single-file browser app Ants 51: dist/ants51.html.
 //
 //   node tools/build-html.mjs              all ants (for your private use)
 //   node tools/build-html.mjs --own-only   only ants/c (publishable, SPEC §10)
 //
-// Everything is inlined (engine, worker, app, design tokens, icons, ants as
+// Everything is inlined (engine, worker, app, design tokens, logo, ants as
 // base64 WebAssembly), so the file works when opened straight from disk,
 // offline.
 
@@ -35,14 +35,17 @@ const worker = [
 ].join("\n");
 
 const ui = (...p) => readFileSync(join(ROOT, "ui", ...p), "utf8");
-// The icon sprite's symbols; the page wraps them in its own hidden <svg>.
-const icons = ui("assets", "icons.svg").replace(/^[\s\S]*?<svg[^>]*>/, "").replace(/<\/svg>\s*$/, "");
+const logo = (name) => ui("assets", "logo", name).replace(/^<\?xml[^>]*>\s*/, "");
+const favicon = "data:image/svg+xml," + encodeURIComponent(ui("assets", "logo", "favicon.svg"));
 
 const html = ui("app.html")
   .replace("{{TOKENS}}", () => ui("assets", "tokens.css"))
   .replace("{{MOTION}}", () => ui("assets", "motion.css"))
   .replace("{{STYLE}}", () => ui("app.css"))
-  .replace("{{ICONS}}", () => icons)
+  .replace("{{FAVICON}}", () => favicon)
+  .replace("{{LOGO_OBSIDIAN}}", () => logo("ants-51-on-black.svg"))
+  .replace("{{LOGO_CHAMPAGNE}}", () => logo("ants-51-on-cream.svg"))
+  .replace("{{PRESENTATION}}", () => noScriptEnd(ui("assets", "presentation.js")))
   .replace("{{ANTS}}", () => noScriptEnd(JSON.stringify({ wasm: ants, js: jsAnts })))
   .replace("{{WORKER}}", () => noScriptEnd(worker))
   .replace("{{APP}}", () => noScriptEnd(readFileSync(join(ROOT, "ui", "app.js"), "utf8")));
